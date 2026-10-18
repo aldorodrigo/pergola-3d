@@ -2,7 +2,7 @@
 
 Editor 3D de una pérgola / quincho moderno (estructura de aluminio antracita, cielorraso de listones símil madera, banda abierta de listones, columnas con aletas, cocina con parrilla, TV en pared de listones y muralla). Funciona en el navegador, sin instalar nada.
 
-**Abrir el editor:** https://OWNER.github.io/pergola-3d/
+**Abrir el editor:** https://aldorodrigo.github.io/pergola-3d/
 
 ## Qué permite
 
