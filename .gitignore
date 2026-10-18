@@ -1,0 +1,10 @@
+# Solo se publica lo que figura acá abajo; todo lo demás de la carpeta queda privado
+*
+!.gitignore
+!README.md
+!index.html
+!pergola-3d.html
+!referencias/
+!referencias/foto1.webp
+!referencias/foto2.png
+!referencias/foto3.webp
