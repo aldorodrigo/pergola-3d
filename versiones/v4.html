@@ -957,11 +957,11 @@ function defaultState() {
   const a = (...args) => { const o = mkObj(...args); s.objetos.push(o); return o; };
   const piso = a('piso', 'Losa / piso', [0.4, 0, 0.6], 0, { largo: 11.5, ancho: 8.2 });
   s.objetos.push(murallaTV(piso));
-  const techo = a('techo', 'Techo pérgola', [0, 0, 0], 0, { largo: 10, ancho: 3.5, banda: 1.4, bandaListones: 6, vigas: 2, lucesX: 6 });
-  s.objetos.push(...columnasPara(techo, 2, 1.6, 0.68).map(c => { if (c.pos[2] > 0) c.pos[2] = 0.22; return c; }));   // las del frente, bajo la viga de la banda
-  a('panelTV', 'Pared de listones + TV', [-1.6, 0, -1.55], 0, { largo: 2.4 });
-  a('celosia', 'Celosía vertical', [0.25, 0, -1.55], 0, { largo: 0.8, listones: 7 });
-  a('isla', 'Isla con parrilla', [4.05, 0, -0.25], -90, { largo: 2.8, prof: 0.8, parrillaLado: 'izq' });
+  const techo = a('techo', 'Techo pérgola', [0, 0, 0], 0, { largo: 10, ancho: 5, banda: 1.4, bandaListones: 6, vigas: 2, lucesX: 6 });
+  s.objetos.push(...columnasPara(techo, 2, 1.6, 0.68).map(c => { if (c.pos[2] > 0) c.pos[2] = 0.97; return c; }));   // las del frente, bajo la viga de la banda
+  a('panelTV', 'Pared de listones + TV', [-1.6, 0, -2.25], 0, { largo: 2.4 });
+  a('celosia', 'Celosía vertical', [0.25, 0, -2.25], 0, { largo: 0.8, listones: 7 });
+  a('isla', 'Isla con parrilla', [4.05, 0, -0.6], -90, { largo: 2.8, prof: 0.8, parrillaLado: 'izq' });
   // sin muebles (sofás, mesa, banquetas, reposeras): se agregan desde "Agregar objeto"
   a('ventilador', 'Ventilador 1', [-3.3, 2.75, -0.75]);
   a('ventilador', 'Ventilador 2', [0, 2.75, -0.75]);
