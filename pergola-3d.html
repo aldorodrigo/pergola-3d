@@ -849,11 +849,12 @@ const TYPES = {
     P('lucesX', 'Filas a lo largo', 0, 20, 1, 4, ''), P('lucesZ', 'Filas a lo ancho', 0, 10, 1, 2, ''),
   ] },
   columna: { n: 'Columna', ic: 'CO', col: '#c9a27a', build: buildColumna, params: [
-    P('ancho', 'Ancho del poste (X)', 0.05, 0.8, 0.01, 0.2), P('prof', 'Profundidad del poste (Z)', 0.05, 0.8, 0.01, 0.2),
+    S('estructura', 'Estructura', [['aletas', 'Poste + aletas de caño (estructurales)'], ['armada', 'Poste de acero (aletas decorativas)']], 'aletas'),
+    P('ancho', 'Ancho del poste (X)', 0.05, 0.8, 0.01, 0.1), P('prof', 'Profundidad del poste (Z)', 0.05, 0.8, 0.01, 0.15),
     P('alto', 'Alto', 0.5, 6, 0.01, 2.75), Bo('sincro', 'Alto = altura del techo', true),
     H('Aletas / listones verticales (lado +X)'),
-    P('aletas', 'Cantidad', 0, 10, 1, 4, ''), P('aletaEsp', 'Espesor', 0.01, 0.2, 0.005, 0.045),
-    P('aletaProf', 'Profundidad', 0.03, 0.6, 0.01, 0.16), P('aletaSep', 'Separación', 0, 0.15, 0.005, 0.015),
+    P('aletas', 'Cantidad', 0, 10, 1, 3, ''), P('aletaEsp', 'Espesor', 0.01, 0.2, 0.005, 0.05),
+    P('aletaProf', 'Profundidad', 0.03, 0.6, 0.01, 0.15), P('aletaSep', 'Separación', 0, 0.15, 0.005, 0.015),
     S('aletaPatron', 'Patrón', [['mn', 'Madera / negro alternado'], ['m', 'Todas de madera'], ['n', 'Todas aluminio']], 'mn'),
     S('aletaAlin', 'Alineación', [['centro', 'Centradas'], ['frente', 'Al frente (+Z)'], ['fondo', 'Al fondo (−Z)']], 'centro'),
   ] },
@@ -1108,11 +1109,12 @@ function modoMesh(o, m) {
   const capa = capaObj(o, m);
   if (viewMode === 'sincielo') return capa === 'cielorraso' ? 'oculto' : 'normal';
   if (viewMode === 'capas') {
-    if (capa === 'poste' || o.tipo === 'arbol' || !capaOn(capa)) return 'oculto';
+    if (capa === 'poste' || o.tipo === 'arbol' || !capaOn(capa) || (o.tipo === 'columna' && params(o).estructura === 'aletas')) return 'oculto';
     return capa === 'resto' ? 'fantasma' : 'capa';
   }
   if (o.tipo === 'techo') return capa === 'cielorraso' ? 'oculto' : 'fantasma';
-  if (o.tipo === 'columna') return capa === 'poste' ? 'oculto' : 'fantasma';
+  // con aletas estructurales, poste y aletas son la estructura: los dibuja la estructura (sin superponerse)
+  if (o.tipo === 'columna') return capa === 'poste' || params(o).estructura === 'aletas' ? 'oculto' : 'fantasma';
   if (o.tipo === 'arbol') return 'oculto';
   return FANTASMA_TIPOS.has(o.tipo) ? 'fantasma' : 'normal';
 }
@@ -1967,6 +1969,21 @@ function columnaArmada(B, a, t) { // columna B×B: 4 caños a×a×t en las esqui
   return { nombre: `columna armada ${B}×${B} (4 caños ${a}×${a}×${t} + chapa N°14 de ${t} mm)`, h: B / 1000, b: B / 1000, t, A, Ae: 4 * s.A + 4 * Ap * 0.6, I, Iy: I, Z: Zef,
     kgm: A * 0.00785, phiMn: 0.9 * EST_FY * Zef * kSlender(s) / 1e6, phiVn: 0.9 * 0.6 * EST_FY * 2 * (B - 3 * t) * t / 1000, EI: EST_E * I * 1e-9, r: Math.sqrt(I / A) / 1000, lf: (a - 3 * t) / t, armada: 4 };
 }
+// Columna de poste + aletas de caño, todas estructurales: el poste son kPoste caños pegados y las aletas caños iguales
+// separados unos cm, unidos con separadores soldados cada ~50 cm (se toma un 30 % de trabajo en conjunto del grupo).
+// h: lado de los caños (prof, dirección local Z de la columna); b: ancho total del grupo (dirección de las aletas, local X).
+function columnaAletas(kPoste, nAl, esp, prof, sep) {
+  const e = Math.round(esp * 1000), p = Math.round(prof * 1000), g = Math.round(sep * 1000), COMP = 0.3;
+  const s = secRHS(p, e, 2), sy = secRHS(e, p, 2);
+  const xs = []; for (let i = 0; i < kPoste; i++) xs.push(e / 2 + i * e);
+  let x = kPoste * e; for (let i = 0; i < nAl; i++) { x += g; xs.push(x + e / 2); x += e; }
+  const n = xs.length, A = n * s.A, xc = xs.reduce((a, b) => a + b, 0) / n;
+  const Ad2 = xs.reduce((a, xi) => a + s.A * (xi - xc) ** 2, 0), Ad = xs.reduce((a, xi) => a + s.A * Math.abs(xi - xc), 0);
+  const Iz = n * s.I, Ix = n * sy.I + COMP * Ad2;
+  return { nombre: `poste de ${kPoste} caños ${e}×${p}×2 + ${nAl} aletas de caño ${e}×${p}×2`, h: p / 1000, b: x / 1000, t: 2, A, I: Iz, Iy: Ix, kgm: n * s.kgm, lf: s.lf,
+    phiMn: n * s.phiMn, phiMny: n * sy.phiMn + 0.9 * EST_FY * COMP * Ad * kSlender(sy) / 1e6, phiVn: n * s.phiVn, EI: EST_E * Iz * 1e-9, EIy: EST_E * Ix * 1e-9,
+    r: Math.sqrt(Math.min(Iz, Ix) / A) / 1000, armada: n, aletas: true, kPoste, nAl, e: e / 1000, p: p / 1000, g: g / 1000, xs: xs.map(v => v / 1000) };
+}
 // Precios de referencia (Gs): acero en barras, hormigón elaborado y hierro ADN; las secciones armadas suman mano de obra de soldadura
 const PRECIOS = { hormigon: 890000, hierro: 7390, cuantia: 50, armado: 0.15 };
 const costoM = s => s.kgm * (s.armada ? 1 + PRECIOS.armado : 1);
@@ -2286,28 +2303,40 @@ function disenarEstructura(inp) {
         return { eje, Ftop, Fcol, Ms: Ftop * (yCap + eFin / 2) + Fcol * c.alto / 2, Vs: Ftop + Fcol };
       }).sort((a, b) => b.Ms - a.Ms);
       const { Ms, Vs } = vientos[0], Mr = 1.6 * Ms;
-      const probar = sec => {
+      // columna de poste + aletas de caño: la sección la fija el diseño (no se elige del catálogo) y su orientación también
+      const fija = c.tipoCol === 'aletas' && c.aletas && c.aletas.n > 0 && c.finDir
+        ? columnaAletas(Math.max(1, Math.round(c.pa / c.aletas.esp)), c.aletas.n, c.aletas.esp, c.aletas.prof, c.aletas.sep) : null;
+      const finX = fija && Math.abs(c.finDir[0]) > 0.7;   // las aletas salen a lo largo de x del techo
+      const probar = (sec, ejeFuerte) => {
         const sw = sec.kgm * 0.00981 * Hc, Pu = R_('U') + 1.2 * sw;
         const lam = 2.1 * Hc / sec.r, Fe = Math.PI ** 2 * EST_E / lam ** 2, lr = 1.40 * Math.sqrt(EST_E / EST_FY), Q = sec.Ae ? sec.Ae / sec.A : sec.lf > lr ? lr / sec.lf : 1;
         const Fcr = Q * EST_FY / Fe <= 2.25 ? Q * 0.658 ** (Q * EST_FY / Fe) * EST_FY : 0.877 * Fe, phiPn = 0.9 * Fcr * sec.A / 1000;
-        const ejes = [{ M: sec.phiMn, EI: sec.EI }, { M: sec.phiMny || sec.phiMn, EI: sec.EIy || sec.EI }];   // eje fuerte contra el viento más fuerte
         let inter = 0, drift = 0;
-        vientos.forEach((w, j) => {
-          const pr = Pu / phiPn, mr = 1.6 * w.Ms / ejes[j].M;
+        vientos.forEach(w => {   // el eje fuerte va contra el viento más fuerte (o donde lo pone el diseño)
+          const fuerte = w.eje === (ejeFuerte || vientos[0].eje), M = fuerte ? sec.phiMn : sec.phiMny || sec.phiMn, EI = fuerte ? sec.EI : sec.EIy || sec.EI;
+          const pr = Pu / phiPn, mr = 1.6 * w.Ms / M;
           inter = Math.max(inter, pr >= 0.2 ? pr + 8 / 9 * mr : pr / 2 + mr);
-          drift = Math.max(drift, w.Ftop * Hc ** 3 / (3 * ejes[j].EI) + (w.Fcol / c.alto) * c.alto ** 4 / (8 * ejes[j].EI));
+          drift = Math.max(drift, w.Ftop * Hc ** 3 / (3 * EI) + (w.Fcol / c.alto) * c.alto ** 4 / (8 * EI));
         });
         return { sec, Hc, Pu, phiPn, inter, drift, sw, ok: inter <= 0.85 && drift <= Hc / 200 };
       };
-      const dims = sec => vientos[0].eje === 'z' ? { w: sec.b, d: sec.h } : { w: sec.h, d: sec.b };   // w a lo largo de x, d a lo largo de z
-      const entra = e => { const { w, d } = dims(e.sec); return w <= c.bx + 0.005 && d <= c.bz + 0.005; };
-      const llena = e => { const { w, d } = dims(e.sec); return entra(e) && w >= c.bx - 0.01 && d >= c.bz - 0.01; };
-      const todos = candCol.map(probar), ev = todos.filter(e => e.ok).sort((a, b) => costoM(a.sec) - costoM(b.sec));
-      let elegido = ev.find(llena) || ev.find(entra) || ev[0];
-      const minimo = ev[0];
-      if (!elegido) { elegido = todos.sort((a, b) => a.inter - b.inter)[0]; av.push(`${c.nombre}: ninguna columna del catálogo verifica; agregá columnas o bajá el techo.`); }
+      const dims = sec => sec === fija ? (finX ? { w: sec.b, d: sec.h } : { w: sec.h, d: sec.b })
+        : vientos[0].eje === 'z' ? { w: sec.b, d: sec.h } : { w: sec.h, d: sec.b };   // w a lo largo de x, d a lo largo de z
+      const entra = e => { if (e.sec === fija) return true; const { w, d } = dims(e.sec); return w <= c.bx + 0.005 && d <= c.bz + 0.005; };
+      const llena = e => { if (e.sec === fija) return true; const { w, d } = dims(e.sec); return entra(e) && w >= c.bx - 0.01 && d >= c.bz - 0.01; };
+      let elegido, minimo = null;
+      if (fija) {
+        elegido = probar(fija, finX ? 'z' : 'x');
+        if (!elegido.ok) av.push(`${c.nombre}: el poste con ${fija.nAl} aletas de caño no alcanza (uso ${Math.round(elegido.inter * 100)} %, se mueve ${Math.round(elegido.drift * 1000)} mm y el máximo es ${Math.round(Hc / 0.2)} mm). Agregale una aleta.`);
+      } else {
+        const todos = candCol.map(s => probar(s)), ev = todos.filter(e => e.ok).sort((a, b) => costoM(a.sec) - costoM(b.sec));
+        elegido = ev.find(llena) || ev.find(entra) || ev[0]; minimo = ev[0];
+        if (!elegido) { elegido = todos.sort((a, b) => a.inter - b.inter)[0]; av.push(`${c.nombre}: ninguna columna del catálogo verifica; agregá columnas o bajá el techo.`); }
+      }
       const { w, d } = dims(elegido.sec), revestir = entra(elegido) && !llena(elegido);
       if (!entra(elegido)) respeta = false, av.push(`${c.nombre}: el poste de ${Math.round(c.bx * 100)}×${Math.round(c.bz * 100)} cm no alcanza; hace falta ${nomSec(elegido.sec)}, más grande que el poste del diseño (se dibuja así en la vista Terminado).`);
+      // centro del grupo de caños (con aletas queda corrido hacia ellas): ahí van la placa base y la zapata
+      const desc = fija ? fija.b / 2 - fija.kPoste * fija.e / 2 : 0, gx = c.x + (fija ? desc * c.finDir[0] : 0), gz = c.z + (fija ? desc * c.finDir[1] : 0);
       const bmax = Math.max(w, d);
       const bp = Math.ceil((bmax + 0.15) / 0.05 - 1e-9) * 0.05, tp = Mr > 20 ? 0.019 : bmax >= 0.15 ? 0.016 : 0.0125;
       const Pup = R_('UP') + 0.9 * elegido.sw, lever = bp - 0.075;
@@ -2332,7 +2361,7 @@ function disenarEstructura(inp) {
         else if (Df + libre < cfg.profPileta + 0.3) av.push(`${c.nombre}: la zapata (a ${libre.toFixed(2)} m de la ${pl.nombre}) carga la pared de la pileta. Fundar a ${fmt2(cfg.profPileta + 0.3 - libre)} m o más, o alejarla.`);
       }
       for (const mu of inp.walls || []) if (distPoly(c.x, c.z, mu.poly) < zap.B / Math.SQRT2) av.push(`${c.nombre}: la zapata (${fmt2(zap.B)} m) se superpone con el cimiento de la ${mu.nombre}. Hacé una zapata combinada con el cimiento del muro, o una zapata excéntrica.`);
-      colDesign.push({ c, vp, ...elegido, w, d, revestir, Mr, Ms, Vs, Pup, bp, tp, dB, hef, zap, yCap, minimo: minimo && minimo.sec });
+      colDesign.push({ c, vp, ...elegido, w, d, revestir, Mr, Ms, Vs, Pup, bp, tp, dB, hef, zap, yCap, minimo: minimo && minimo.sec, fija, gx, gz });
     });
     // --- miembros (enTecho: van en el plano inclinado del techo; el resto, a plomo) ---
     const add = m => { miembros.push(m); return m; };
@@ -2427,15 +2456,34 @@ function disenarEstructura(inp) {
     for (const cd of colDesign) {
       const { c, sec } = cd, yb = -0.10 + cd.tp;
       const secTxt = NomSec(sec) + (cd.revestir ? ` (revestida a ${Math.round(c.bx * 100)}×${Math.round(c.bz * 100)} cm)` : '');
-      add({ grupo: 'COL', nombre: `${c.nombre} · columna`, seccion: secTxt, kgm: sec.kgm, fab: fab(sec), w: cd.w, d: cd.d, vertical: true, p0: [c.x, yb, c.z], p1: [c.x, c.alto, c.z], soloEst: true, util: cd.inter, ...(cd.w > c.bx + 0.005 || cd.d > c.bz + 0.005 ? { vista: true, acabado: 'aluminio' } : {}) });
-      add({ grupo: 'COL', nombre: `${c.nombre} · columna (tramo sobre cielorraso)`, seccion: secTxt, kgm: sec.kgm, fab: fab(sec), w: cd.w, d: cd.d, vertical: true, p0: [c.x, c.alto, c.z], p1: [c.x, cd.yCap, c.z], util: cd.inter });
-      add({ grupo: 'PL', nombre: `${c.nombre} · capitel`, seccion: `Chapa ${Math.round(c.bx * 1000)}×${Math.round(c.bz * 1000)}×12,7 mm`, kg: c.bx * c.bz * 0.0127 * 7850, box: [c.x, cd.yCap + 0.0064, c.z, c.bx, 0.0127, c.bz] });
-      add({ grupo: 'PL', nombre: `${c.nombre} · placa base + 4 cartelas`, seccion: `Chapa ${Math.round(cd.bp * 1000)}×${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm`, kg: cd.bp ** 2 * cd.tp * 7850 + 4 * 0.5 * 0.1 * 0.1 * 0.0095 * 7850, soloEst: true, box: [c.x, -0.10 + cd.tp / 2, c.z, cd.bp, cd.tp, cd.bp] });
+      if (cd.fija) {
+        // poste de caños pegados + aletas de caño: cada caño es una pieza, unidas con tacos separadores cada ~50 cm
+        const F = cd.fija, fd = c.finDir, pd = c.perpDir, x0 = -F.kPoste * F.e / 2, tw = finX => finX ? [F.e, F.p] : [F.p, F.e];
+        const [w1, d1] = tw(Math.abs(fd[0]) > 0.7), tubo = NomSec({ nombre: `${Math.round(F.e * 1000)}×${Math.round(F.p * 1000)}×2` }) + ` (poste de ${F.kPoste} + ${F.nAl} aletas)`;
+        F.xs.forEach((xi, i) => {
+          const off = x0 + xi, zo = i < F.kPoste ? 0 : c.alinZ || 0, X = c.x + off * fd[0] + zo * pd[0], Z = c.z + off * fd[1] + zo * pd[1];
+          const nom = i < F.kPoste ? `${c.nombre} · poste (caño ${i + 1} de ${F.kPoste})` : `${c.nombre} · aleta ${i - F.kPoste + 1} (estructural)`;
+          add({ grupo: 'COL', nombre: nom, seccion: tubo, kgm: F.kgm / F.xs.length, fab: fab(sec), w: w1, d: d1, vertical: true, p0: [X, yb, Z], p1: [X, c.alto, Z], soloEst: true, util: cd.inter });
+          add({ grupo: 'COL', nombre: `${nom.replace(' (estructural)', '')} (tramo sobre cielorraso)`, seccion: tubo, kgm: F.kgm / F.xs.length, fab: fab(sec), w: w1, d: d1, vertical: true, p0: [X, c.alto, Z], p1: [X, cd.yCap, Z], util: cd.inter });
+        });
+        // separadores: un taco en cada hueco entre caños, cada ~50 cm de alto (soldados; casi no se ven en el hueco)
+        const huecos = F.xs.slice(F.kPoste).map((xi, j) => x0 + xi - F.e / 2 - F.g / 2), nN = Math.max(2, Math.round((c.alto - 0.3) / 0.5));
+        for (const off of huecos) for (let k = 0; k < nN; k++) {
+          const y = 0.25 + (c.alto - 0.45) * k / Math.max(1, nN - 1), X = c.x + off * fd[0], Z = c.z + off * fd[1], [sw, sd] = Math.abs(fd[0]) > 0.7 ? [F.g, 0.1] : [0.1, F.g];
+          add({ grupo: 'COL', nombre: `${c.nombre} · separador entre aletas`, seccion: `Taco de caño ${Math.round(F.e * 1000)}×${Math.round(F.p * 1000)}×2, ${Math.round(F.g * 1000)} mm`, kg: F.g * 0.1 * 0.004 * 7850 + 0.05, vista: true, acabado: 'aluminio', box: [X, y, Z, sw, 0.06, sd] });
+        }
+      } else {
+        add({ grupo: 'COL', nombre: `${c.nombre} · columna`, seccion: secTxt, kgm: sec.kgm, fab: fab(sec), w: cd.w, d: cd.d, vertical: true, p0: [c.x, yb, c.z], p1: [c.x, c.alto, c.z], soloEst: true, util: cd.inter, ...(cd.w > c.bx + 0.005 || cd.d > c.bz + 0.005 ? { vista: true, acabado: 'aluminio' } : {}) });
+        add({ grupo: 'COL', nombre: `${c.nombre} · columna (tramo sobre cielorraso)`, seccion: secTxt, kgm: sec.kgm, fab: fab(sec), w: cd.w, d: cd.d, vertical: true, p0: [c.x, c.alto, c.z], p1: [c.x, cd.yCap, c.z], util: cd.inter });
+      }
+      const gx = cd.gx, gz = cd.gz, capW = cd.fija ? cd.w : c.bx, capD = cd.fija ? cd.d : c.bz;
+      add({ grupo: 'PL', nombre: `${c.nombre} · capitel`, seccion: `Chapa ${Math.round(capW * 1000)}×${Math.round(capD * 1000)}×12,7 mm`, kg: capW * capD * 0.0127 * 7850, box: [gx, cd.yCap + 0.0064, gz, capW, 0.0127, capD] });
+      add({ grupo: 'PL', nombre: `${c.nombre} · placa base + 4 cartelas`, seccion: `Chapa ${Math.round(cd.bp * 1000)}×${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm`, kg: cd.bp ** 2 * cd.tp * 7850 + 4 * 0.5 * 0.1 * 0.1 * 0.0095 * 7850, soloEst: true, box: [gx, -0.10 + cd.tp / 2, gz, cd.bp, cd.tp, cd.bp] });
       const o = cd.bp / 2 - 0.0375;
-      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) add({ grupo: 'PE', nombre: `${c.nombre} · perno de anclaje`, seccion: `Perno Ø${cd.dB} × ${Math.round((cd.hef + 0.15) * 1000)} mm con tuerca y arandela`, kgm: 0.00617 * cd.dB ** 2, r: cd.dB / 2000, cyl: true, soloEst: true, p0: [c.x + sx * o, -0.10 - cd.hef, c.z + sz * o], p1: [c.x + sx * o, -0.10 + cd.tp + 0.04, c.z + sz * o] });
+      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) add({ grupo: 'PE', nombre: `${c.nombre} · perno de anclaje`, seccion: `Perno Ø${cd.dB} × ${Math.round((cd.hef + 0.15) * 1000)} mm con tuerca y arandela`, kgm: 0.00617 * cd.dB ** 2, r: cd.dB / 2000, cyl: true, soloEst: true, p0: [gx + sx * o, -0.10 - cd.hef, gz + sz * o], p1: [gx + sx * o, -0.10 + cd.tp + 0.04, gz + sz * o] });
       const z = cd.zap;
-      add({ grupo: 'FU', nombre: `${c.nombre} · pedestal`, seccion: `Pedestal ${Math.round(z.a * 100)}×${Math.round(z.a * 100)} cm`, vol: z.a * z.a * z.hp, soloEst: true, box: [c.x, -z.Df + z.H + z.hp / 2, c.z, z.a, z.hp, z.a] });
-      add({ grupo: 'FU', nombre: `${c.nombre} · zapata`, seccion: `Zapata ${fmt2(z.B)}×${fmt2(z.B)}×${fmt2(z.H)} m`, vol: z.B * z.B * z.H, soloEst: true, box: [c.x, -z.Df + z.H / 2, c.z, z.B, z.H, z.B] });
+      add({ grupo: 'FU', nombre: `${c.nombre} · pedestal`, seccion: `Pedestal ${Math.round(z.a * 100)}×${Math.round(z.a * 100)} cm`, vol: z.a * z.a * z.hp, soloEst: true, box: [gx, -z.Df + z.H + z.hp / 2, gz, z.a, z.hp, z.a] });
+      add({ grupo: 'FU', nombre: `${c.nombre} · zapata`, seccion: `Zapata ${fmt2(z.B)}×${fmt2(z.B)}×${fmt2(z.H)} m`, vol: z.B * z.B * z.H, soloEst: true, box: [gx, -z.Df + z.H / 2, gz, z.B, z.H, z.B] });
     }
     for (const m of miembros) {
       if (m.p0) m.L = Math.hypot(m.p1[0] - m.p0[0], m.p1[1] - m.p0[1], m.p1[2] - m.p0[2]);
@@ -2479,7 +2527,7 @@ function disenarEstructura(inp) {
       checks.push(`${mark(br.ok)} Banda de lamas: ${br.n} lamas con ${nomSec(br.lama.s)} adentro, de ${fmt2(br.sMax)} m entre apoyos (uso ${pct(br.lama.util)}, flecha ${Math.round(br.lama.f * 1000)} mm) · fascia de la banda con 2 cordones ${nomSec(br.cord.s)} contra el viento (uso ${pct(br.cord.util)}, flecha ${Math.round(br.cord.f * 1000)} mm) · ${br.sel.length ? `${br.sel.length} línea(s) de separadores (tacos del mismo caño entre las lamas, momento ${fmt1(br.Mlad)} kN·m)` : 'sin separadores: las lamas van de punta a punta'}${bastLat ? ` · bastidores laterales ${nomSec(bastLat.sec)} (uso ${pct(bastLat.util)})` : ''}`);
     }
     checks.push(`✓ Canaleta oculta ${Math.round(gut.b * 1000)}×${Math.round(gut.d * 1000)} mm: lluvia de ${cfg.lluvia} mm/h sobre ${fmt1(areaC)} m² → caudal ${fmt1(gut.Q)} L/s; capacidad ${fmt1(gut.cap)} L/s con 0,5 % de caída · ${gut.nBaj} bajadas Ø110 (${fmt1(gut.capBaj)} L/s)${embutidas ? ' embutidas en la muralla' : ''} · 2 gárgolas de rebalse`);
-    for (const cd of colDesign) checks.push(`${mark(cd.ok)} ${cd.c.nombre}, ${nomSec(cd.sec)} (alto ${fmt2(cd.Hc)} m): Pu ${fmt1(cd.Pu)} kN, Mu base ${fmt1(cd.Mr)} kN·m, uso ${pct(cd.inter)} · desplazamiento por viento ${Math.round(cd.drift * 1000)} mm · placa ${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm con 4 pernos Ø${cd.dB} · zapata ${fmt2(cd.zap.B)}×${fmt2(cd.zap.B)}×${fmt2(cd.zap.H)} m a −${fmt2(cd.zap.Df)} m (σ ${Math.round(cd.zap.sigma)} kPa, FS vuelco ${fmt2(cd.zap.FSvuelco)}${cd.Pup < 0 ? `, succión ${fmt1(-cd.Pup)} kN` : ''})`);
+    for (const cd of colDesign) checks.push(`${mark(cd.ok)} ${cd.c.nombre}, ${nomSec(cd.sec)}${cd.fija ? ' unidos con separadores cada 50 cm' : ''} (alto ${fmt2(cd.Hc)} m): Pu ${fmt1(cd.Pu)} kN, Mu base ${fmt1(cd.Mr)} kN·m, uso ${pct(cd.inter)} · desplazamiento por viento ${Math.round(cd.drift * 1000)} mm · placa ${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm con 4 pernos Ø${cd.dB} · zapata ${fmt2(cd.zap.B)}×${fmt2(cd.zap.B)}×${fmt2(cd.zap.H)} m a −${fmt2(cd.zap.Df)} m (σ ${Math.round(cd.zap.sigma)} kPa, FS vuelco ${fmt2(cd.zap.FSvuelco)}${cd.Pup < 0 ? `, succión ${fmt1(-cd.Pup)} kN` : ''})`);
     const colMin = colDesign.reduce((m, cd) => !cd.minimo ? m : !m || costoM(cd.minimo) > costoM(m) ? cd.minimo : m, null);
     if (colMin && colDesign.length && costoM(colMin) < costoM(colDesign[0].sec) - 0.5) {
       const Hs = colDesign.reduce((a, cd) => a + cd.Hc, 0), dkg = (colDesign[0].sec.kgm - colMin.kgm) * Hs;
@@ -2589,7 +2637,11 @@ function estEntrada() {
     const q = params(o), [x, z] = loc(o.pos[0], o.pos[2]), na = q.aletas | 0;
     const fx = q.ancho + na * (q.aletaEsp + q.aletaSep) + (na ? q.aletaSep : 0), fz = Math.max(q.prof, na ? q.aletaProf : 0);
     const rel = ((o.rot[1] - ry) % Math.PI + Math.PI) % Math.PI, girada = Math.abs(rel - Math.PI / 2) < Math.PI / 4;
-    return { id: o.id, nombre: o.nombre, x, z, b: Math.max(q.ancho, q.prof), bx: girada ? q.prof : q.ancho, bz: girada ? q.ancho : q.prof, alto: q.alto, ex: girada ? fz : fx, ez: girada ? fx : fz };
+    // aletas: dirección en que salen (eje X local de la columna) y su perpendicular, en el marco del techo
+    const r = o.rot[1] - ry, finDir = [Math.cos(r), -Math.sin(r)], perpDir = [Math.sin(r), Math.cos(r)];
+    const alinZ = q.aletaAlin === 'frente' ? q.prof / 2 - q.aletaProf / 2 : q.aletaAlin === 'fondo' ? -q.prof / 2 + q.aletaProf / 2 : 0;
+    return { id: o.id, nombre: o.nombre, x, z, b: Math.max(q.ancho, q.prof), bx: girada ? q.prof : q.ancho, bz: girada ? q.ancho : q.prof, alto: q.alto, ex: girada ? fz : fx, ez: girada ? fx : fz,
+      tipoCol: q.estructura, pa: q.ancho, pp: q.prof, aletas: { n: na, esp: q.aletaEsp, prof: q.aletaProf, sep: q.aletaSep }, finDir, perpDir, alinZ };
   }).filter(c => Math.abs(c.x) <= p.largo / 2 + 0.3 && Math.abs(c.z) <= p.ancho / 2 + 0.3);
   const pools = state.objetos.filter(o => o.tipo === 'pileta' && o.visible !== false).map(o => { const q = params(o); return { nombre: o.nombre, poly: rectLoc(o, q.largo, q.ancho) }; });
   const walls = state.objetos.filter(o => o.tipo === 'muro' && o.visible !== false).map(o => { const q = params(o); return { nombre: o.nombre, alto: o.pos[1] + q.alto, poly: rectLoc(o, q.largo, q.espesor, 0.15) }; });
