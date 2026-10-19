@@ -962,18 +962,13 @@ function defaultState() {
   a('panelTV', 'Pared de listones + TV', [-1.6, 0, -2.55], 0, { largo: 2.4 });
   a('celosia', 'Celosía vertical', [0.25, 0, -2.55], 0, { largo: 0.8, listones: 7 });
   a('isla', 'Isla con parrilla', [3.4, 0, -0.35], -90, { largo: 3.0, prof: 0.8, parrillaLado: 'izq' });
-  for (let i = 0; i < 4; i++) a('banqueta', `Banqueta ${i + 1}`, [2.45, 0, -1.35 + i * 0.65], 90);
-  a('sofa', 'Sofá 1', [-1.6, 0, 0.55], 180);
-  a('sofa', 'Sofá 2', [0.9, 0, 0.55], 180);
-  a('mesaRatona', 'Mesa ratona', [-1.6, 0, -0.9]);
+  // sin muebles (sofás, mesa, banquetas, reposeras): se agregan desde "Agregar objeto"
   a('ventilador', 'Ventilador 1', [-2.71, 2.75, -0.33]);
   a('ventilador', 'Ventilador 2', [0, 2.75, -0.33]);
   a('ventilador', 'Ventilador 3', [2.71, 2.75, -0.33]);
   a('maceta', 'Maceta 1', [-4.75, 0, 2.3], 0, { planta: 'hojas' });
   a('maceta', 'Maceta 2', [4.9, 0, -3.0], 0, { forma: 'redonda', ancho: 0.45, alto: 0.5, planta: 'arbusto', plantaAlto: 0.6, semilla: 2 });
   a('pileta', 'Pileta', [-10.2, 0, 0.3], 0, { largo: 4, ancho: 8.5 });
-  a('reposera', 'Reposera 1', [-6.9, 0, -1.2], 180);
-  a('reposera', 'Reposera 2', [-6.9, 0, -0.3], 180);
   a('arbol', 'Árbol grande', [6.8, 0, -4.8], 0, { alto: 10, copa: 10, tronco: 0.8, semilla: 3 });
   a('arbol', 'Árbol 2', [-8.5, 0, -6.5], 0, { alto: 7, copa: 6.5, tronco: 0.45, semilla: 7 });
   return s;
