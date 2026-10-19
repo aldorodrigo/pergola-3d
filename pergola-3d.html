@@ -16,7 +16,6 @@
   header{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
   .brand{font-weight:650;margin-right:4px;white-space:nowrap;letter-spacing:.01em}
   .brand small{color:var(--muted);font-weight:400}
-  .brand small a{color:inherit}
   .grp{display:flex;gap:3px;align-items:center;padding-right:7px;border-right:1px solid var(--line)}
   .grp:last-child{border-right:0}
   .grp.end{margin-left:auto}
@@ -122,7 +121,7 @@
 <body>
 <div id="app">
   <header>
-    <div class="brand">Pérgola 3D <small>editor · <a href="versiones/index.html" title="Versiones anteriores del editor">versiones</a></small></div>
+    <div class="brand">Pérgola 3D <small>editor</small></div>
     <div class="grp mobileonly"><button id="bShowLeft">Objetos</button><button id="bShowRight">Propiedades</button></div>
     <div class="grp">
       <button id="bMover" class="on" title="Mover el objeto seleccionado (W)">Mover</button>
@@ -153,6 +152,7 @@
     </div>
     <div class="grp">
       <button id="bCotas" class="on" title="Mostrar cotas del techo">Cotas</button>
+      <button id="bNombres" class="on" title="Mostrar u ocultar las etiquetas con los nombres de las piezas (N)">Nombres</button>
       <button id="bGrilla" title="Mostrar grilla de 50 cm">Grilla</button>
       <button id="bNoche" title="Iluminación nocturna con spots encendidos">Noche</button>
       <button id="bFans" class="on" title="Animar ventiladores">Ventiladores</button>
@@ -961,7 +961,7 @@ function columnasPara(techo, porLado = 2, retX = 1.35, retZ = 0.65) {
 function defaultState() {
   const s = { version: 2, materiales: {}, vistas: {}, export: { units: 'm' }, estructura: {}, objetos: [] };
   const a = (...args) => { const o = mkObj(...args); s.objetos.push(o); return o; };
-  const piso = a('piso', 'Losa / piso', [0.4, 0, 1.1], 0, { largo: 11.5, ancho: 7.2 });   // termina en el borde de atrás del techo: la muralla queda pegada a la pérgola
+  const piso = a('piso', 'Losa / piso', [0.4, 0, 0.25], 0, { largo: 11.5, ancho: 5.5 });   // de la muralla (pegada al fondo de la pérgola) hasta el borde de la pileta
   s.objetos.push(murallaTV(piso));
   a('muro', 'Muralla recrecida bajo la pérgola', [0, 2.4, -2.4], 0, { largo: 10, alto: 0.35, espesor: 0.2, coronamiento: false });   // llega hasta el techo: las bajadas quedan embutidas
   const techo = a('techo', 'Techo pérgola', [0, 0, 0], 0, { largo: 10, ancho: 5, banda: 0.7, bandaListones: 4, vigas: 2, lucesX: 6 });
@@ -974,8 +974,8 @@ function defaultState() {
   a('ventilador', 'Ventilador 2', [0, 2.75, -0.4]);
   a('ventilador', 'Ventilador 3', [3.3, 2.75, -0.4]);
   a('maceta', 'Maceta 1', [-4.75, 0, 2.3], 0, { planta: 'hojas' });
-  a('maceta', 'Maceta 2', [4.9, 0, -3.0], 0, { forma: 'redonda', ancho: 0.45, alto: 0.5, planta: 'arbusto', plantaAlto: 0.6, semilla: 2 });
-  a('pileta', 'Pileta', [-10.2, 0, 0.3], 0, { largo: 4, ancho: 8.5 });
+  a('maceta', 'Maceta 2', [5.6, 0, -2.0], 0, { forma: 'redonda', ancho: 0.45, alto: 0.5, planta: 'arbusto', plantaAlto: 0.6, semilla: 2 });
+  a('pileta', 'Pileta', [0.4, 0, 5.025], -90, { largo: 4, ancho: 8.5 });   // adelante de la pérgola, como en el plano del terreno
   a('arbol', 'Árbol grande', [6.8, 0, -4.8], 0, { alto: 10, copa: 10, tronco: 0.8, semilla: 3 });
   a('arbol', 'Árbol 2', [-8.5, 0, -6.5], 0, { alto: 7, copa: 6.5, tronco: 0.45, semilla: 7 });
   return s;
@@ -2025,6 +2025,16 @@ function clusters(vals, gap) {
   for (const [v, i] of idx) { if (cur.length && v - vals[cur[cur.length - 1]] > gap) { out.push(cur); cur = []; } cur.push(i); }
   if (cur.length) out.push(cur); return out;
 }
+function cercaPoly(px, pz, poly) {   // { d, nx, nz }: distancia y dirección (unitaria) desde el polígono hacia el punto
+  let best = { d: Infinity, nx: 0, nz: 0 };
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j], dx = xj - xi, dz = zj - zi, l2 = dx * dx + dz * dz;
+    const t = l2 ? Math.max(0, Math.min(1, ((px - xi) * dx + (pz - zi) * dz) / l2)) : 0, qx = xi + t * dx, qz = zi + t * dz, d = Math.hypot(px - qx, pz - qz);
+    if (d < best.d) best = { d, nx: d ? (px - qx) / d : 0, nz: d ? (pz - qz) / d : 0 };
+  }
+  if (distPoly(px, pz, poly) === 0) best.d = 0;
+  return best;
+}
 function distPoly(px, pz, poly) { // distancia punto–polígono (0 si está adentro)
   let inside = false, d = Infinity;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -2368,24 +2378,34 @@ function disenarEstructura(inp) {
       const dB = [16, 20, 24].find(d => 0.5625 * 400 * Math.PI * d * d / 4 / 1000 >= Tb) || 24, hef = Math.max(0.30, 15 * dB / 1000);
       const a = Math.max(0.40, Math.ceil((bp + 0.10) / 0.05 - 1e-9) * 0.05);
       const Df = Math.max(cfg.profFund, 0.8), Mf = Ms + Vs * Df, NS = R_('S') + elegido.sw, NSUP = R_('SUP') + elegido.sw;
+      // obstáculos: cimiento de murallas (el polígono ya incluye 15 cm de cimiento a cada lado) y piletas (60 cm libres)
+      const obst = [...(inp.walls || []).filter(mu => !mu.elevado).map(mu => ({ ...cercaPoly(gx, gz, mu.poly), libre: 0, tipo: 'muro', nombre: mu.nombre })),
+        ...(inp.pools || []).map(pl => ({ ...cercaPoly(gx, gz, pl.poly), libre: 0.6, tipo: 'pileta', nombre: pl.nombre }))].filter(o => o.d > 0 && o.d < 3);
       let zap = null;
-      for (let Bz = 0.8; Bz <= 3.0 + 1e-9; Bz += 0.1) {
-        const Hz = Bz <= 1.2 + 1e-9 ? 0.4 : Bz <= 1.8 + 1e-9 ? 0.5 : 0.6, hp = Math.max(0.1, Df - Hz - 0.125);
+      for (let Bz = 0.8; Bz <= 3.0 + 1e-9 && !zap; Bz += 0.1) {
+        const Hz = Bz <= 1.2 + 1e-9 ? 0.4 : Bz <= 1.8 + 1e-9 ? 0.5 : 0.6, hp = Math.max(0.1, Df - Hz - 0.125), hz = Bz / 2;
+        // corrimiento necesario para no pisar cada obstáculo (zapata cuadrada: su alcance en la dirección n es hz·(|nx|+|nz|))
+        let sx = 0, sz = 0;
+        for (const o of obst) { const s = Math.max(0, hz * (Math.abs(o.nx) + Math.abs(o.nz)) - (o.d - o.libre)); sx += s * o.nx; sz += s * o.nz; }
+        const s = Math.hypot(sx, sz);
+        if (s > hz - a / 2 + 1e-9) continue;   // el pedestal tiene que quedar dentro de la zapata
+        if (obst.some(o => o.d - o.libre + (sx * o.nx + sz * o.nz) < hz * (Math.abs(o.nx) + Math.abs(o.nz)) - 1e-6)) continue;   // corrido para un lado, pisa el otro
         const Wf = Bz * Bz * Hz * 24 + a * a * hp * 24 + (Bz * Bz - a * a) * (Df - Hz) * 18;
-        const sig = N => { const e = Mf / N; return e <= Bz / 6 ? N / (Bz * Bz) * (1 + 6 * e / Bz) : (e < Bz / 2 ? 2 * N / (3 * Bz * (Bz / 2 - e)) : Infinity); };
+        const sig = (N, Nc) => { const e = (Mf + Math.abs(Nc) * s) / N; return e <= Bz / 6 ? N / (Bz * Bz) * (1 + 6 * e / Bz) : (e < Bz / 2 ? 2 * N / (3 * Bz * (Bz / 2 - e)) : Infinity); };
         const NA = NS + Wf, NB = NSUP + Wf;
-        const FSlev = NSUP < 0 ? Wf / -NSUP : 99, FSvuelco = NB > 0 ? NB * Bz / 2 / Mf : 0;
-        const sA = sig(NA), sB = NB > 0 ? sig(NB) : Infinity;
-        if (FSlev >= 1.5 && FSvuelco >= 1.5 && sA <= cfg.sigmaAdm && sB <= cfg.sigmaAdm) { zap = { B: Math.round(Bz * 100) / 100, H: Hz, Df, hp, a, Wf, FSlev, FSvuelco, sigma: Math.max(sA, sB), NS, NSUP, Mf }; break; }
+        const FSlev = NSUP < 0 ? Wf / -NSUP : 99, FSvuelco = NB > 0 ? NB * (hz - s) / Mf : 0;
+        const sA = sig(NA, NS), sB = NB > 0 ? sig(NB, NSUP) : Infinity;
+        if (FSlev >= 1.5 && FSvuelco >= 1.5 && sA <= cfg.sigmaAdm && sB <= cfg.sigmaAdm) zap = { B: Math.round(Bz * 100) / 100, H: Hz, Df, hp, a, Wf, FSlev, FSvuelco, sigma: Math.max(sA, sB), NS, NSUP, Mf, sx, sz, s, obst };
       }
-      if (!zap) { av.push(`${c.nombre}: no encontré zapata de hasta 3,0 m que verifique; revisá la tensión admisible del suelo.`); zap = { B: 3, H: 0.6, Df, hp: Math.max(0.1, Df - 0.725), a, FSlev: 0, FSvuelco: 0, sigma: 0, NS, NSUP, Mf }; }
+      if (!zap) { av.push(`${c.nombre}: no encontré zapata de hasta 3,0 m que verifique (ni corrida para esquivar la muralla o la pileta); revisá la tensión admisible del suelo o la posición de la columna.`); zap = { B: 3, H: 0.6, Df, hp: Math.max(0.1, Df - 0.725), a, FSlev: 0, FSvuelco: 0, sigma: 0, NS, NSUP, Mf, sx: 0, sz: 0, s: 0, obst: [] }; }
+      const fx = gx + zap.sx, fz = gz + zap.sz, alcance = (o) => zap.B / 2 * (Math.abs(o.nx) + Math.abs(o.nz)) - (zap.sx * o.nx + zap.sz * o.nz);
       for (const pl of inp.pools || []) {
-        const libre = distPoly(c.x, c.z, pl.poly) - zap.B / Math.SQRT2;
+        const o = cercaPoly(gx, gz, pl.poly), libre = o.d - alcance(o);
         if (libre < 0.6) av.push(`${c.nombre}: la zapata queda a ${Math.max(0, libre).toFixed(2)} m de la ${pl.nombre}: riesgo de tocar el relleno, la pared o los caños. Alejá la columna o consultá a un ingeniero.`);
         else if (Df + libre < cfg.profPileta + 0.3) av.push(`${c.nombre}: la zapata (a ${libre.toFixed(2)} m de la ${pl.nombre}) carga la pared de la pileta. Fundar a ${fmt2(cfg.profPileta + 0.3 - libre)} m o más, o alejarla.`);
       }
-      for (const mu of inp.walls || []) if (!mu.elevado && distPoly(c.x, c.z, mu.poly) < zap.B / Math.SQRT2) av.push(`${c.nombre}: la zapata (${fmt2(zap.B)} m) se superpone con el cimiento de la ${mu.nombre}. Hacé una zapata combinada con el cimiento del muro, o una zapata excéntrica.`);
-      colDesign.push({ c, vp, ...elegido, w, d, revestir, Mr, Ms, Vs, Pup, bp, tp, dB, hef, zap, yCap, minimo: minimo && minimo.sec, fija, gx, gz });
+      for (const mu of inp.walls || []) if (!mu.elevado) { const o = cercaPoly(gx, gz, mu.poly); if (o.d - alcance(o) < -1e-6) av.push(`${c.nombre}: la zapata (${fmt2(zap.B)} m) se superpone con el cimiento de la ${mu.nombre}. Hacé una zapata combinada con el cimiento del muro.`); }
+      colDesign.push({ c, vp, ...elegido, w, d, revestir, Mr, Ms, Vs, Pup, bp, tp, dB, hef, zap, yCap, minimo: minimo && minimo.sec, fija, gx, gz, fx, fz });
     });
     // --- miembros (enTecho: van en el plano inclinado del techo; el resto, a plomo) ---
     const add = m => { miembros.push(m); return m; };
@@ -2516,7 +2536,7 @@ function disenarEstructura(inp) {
       for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) add({ grupo: 'PE', nombre: `${c.nombre} · perno de anclaje`, seccion: `Perno Ø${cd.dB} × ${Math.round((cd.hef + 0.15) * 1000)} mm con tuerca y arandela`, kgm: 0.00617 * cd.dB ** 2, r: cd.dB / 2000, cyl: true, soloEst: true, p0: [gx + sx * o, -0.10 - cd.hef, gz + sz * o], p1: [gx + sx * o, -0.10 + cd.tp + 0.04, gz + sz * o] });
       const z = cd.zap;
       add({ grupo: 'FU', nombre: `${c.nombre} · pedestal`, seccion: `Pedestal ${Math.round(z.a * 100)}×${Math.round(z.a * 100)} cm`, vol: z.a * z.a * z.hp, soloEst: true, box: [gx, -z.Df + z.H + z.hp / 2, gz, z.a, z.hp, z.a] });
-      add({ grupo: 'FU', nombre: `${c.nombre} · zapata`, seccion: `Zapata ${fmt2(z.B)}×${fmt2(z.B)}×${fmt2(z.H)} m`, vol: z.B * z.B * z.H, soloEst: true, box: [gx, -z.Df + z.H / 2, gz, z.B, z.H, z.B] });
+      add({ grupo: 'FU', nombre: `${c.nombre} · zapata${z.s > 0.01 ? ' excéntrica' : ''}`, seccion: `Zapata ${fmt2(z.B)}×${fmt2(z.B)}×${fmt2(z.H)} m${z.s > 0.01 ? `, corrida ${Math.round(z.s * 100)} cm` : ''}`, vol: z.B * z.B * z.H, soloEst: true, box: [cd.fx, -z.Df + z.H / 2, cd.fz, z.B, z.H, z.B] });
     }
     for (const m of miembros) {
       if (m.p0) m.L = Math.hypot(m.p1[0] - m.p0[0], m.p1[1] - m.p0[1], m.p1[2] - m.p0[2]);
@@ -2560,7 +2580,7 @@ function disenarEstructura(inp) {
       checks.push(`${mark(br.ok)} Banda de lamas: ${br.n} lamas con ${nomSec(br.lama.s)} adentro, de ${fmt2(br.sMax)} m entre apoyos (uso ${pct(br.lama.util)}, flecha ${Math.round(br.lama.f * 1000)} mm) · fascia de la banda con 2 cordones ${nomSec(br.cord.s)} contra el viento (uso ${pct(br.cord.util)}, flecha ${Math.round(br.cord.f * 1000)} mm) · ${br.sel.length ? `${br.sel.length} línea(s) de separadores (tacos del mismo caño entre las lamas, momento ${fmt1(br.Mlad)} kN·m)` : 'sin separadores: las lamas van de punta a punta'}${bastLat ? ` · bastidores laterales ${nomSec(bastLat.sec)} (uso ${pct(bastLat.util)})` : ''}`);
     }
     checks.push(`✓ Canaleta oculta ${Math.round(gut.b * 1000)}×${Math.round(gut.d * 1000)} mm: lluvia de ${cfg.lluvia} mm/h sobre ${fmt1(areaC)} m² → caudal ${fmt1(gut.Q)} L/s; capacidad ${fmt1(gut.cap)} L/s con 0,5 % de caída · ${gut.nBaj} bajadas Ø${gut.diam} (${fmt1(gut.capBaj)} L/s, ${fmt1(gut.capBaj / gut.Q)} veces el caudal)${embutidas ? ' embutidas en la muralla' : ''} · 2 gárgolas de rebalse`);
-    for (const cd of colDesign) checks.push(`${mark(cd.ok)} ${cd.c.nombre}, ${nomSec(cd.sec)}${cd.fija ? (cd.fija.union === 'extremos' ? ' unidos solo abajo (placa base) y arriba (capitel)' : ' unidos con separadores cada 50 cm') : ''} (alto ${fmt2(cd.Hc)} m): Pu ${fmt1(cd.Pu)} kN, Mu base ${fmt1(cd.Mr)} kN·m, uso ${pct(cd.inter)} · desplazamiento por viento ${Math.round(cd.drift * 1000)} mm · placa ${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm con 4 pernos Ø${cd.dB} · zapata ${fmt2(cd.zap.B)}×${fmt2(cd.zap.B)}×${fmt2(cd.zap.H)} m a −${fmt2(cd.zap.Df)} m (σ ${Math.round(cd.zap.sigma)} kPa, FS vuelco ${fmt2(cd.zap.FSvuelco)}${cd.Pup < 0 ? `, succión ${fmt1(-cd.Pup)} kN` : ''})`);
+    for (const cd of colDesign) checks.push(`${mark(cd.ok)} ${cd.c.nombre}, ${nomSec(cd.sec)}${cd.fija ? (cd.fija.union === 'extremos' ? ' unidos solo abajo (placa base) y arriba (capitel)' : ' unidos con separadores cada 50 cm') : ''} (alto ${fmt2(cd.Hc)} m): Pu ${fmt1(cd.Pu)} kN, Mu base ${fmt1(cd.Mr)} kN·m, uso ${pct(cd.inter)} · desplazamiento por viento ${Math.round(cd.drift * 1000)} mm · placa ${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm con 4 pernos Ø${cd.dB} · zapata ${fmt2(cd.zap.B)}×${fmt2(cd.zap.B)}×${fmt2(cd.zap.H)} m a −${fmt2(cd.zap.Df)} m${cd.zap.s > 0.01 ? `, excéntrica: corrida ${Math.round(cd.zap.s * 100)} cm para no tocar ${[...new Set(cd.zap.obst.filter(o => o.d - o.libre < cd.zap.B).map(o => o.tipo === 'muro' ? 'el cimiento de la muralla' : 'la pileta'))].join(' ni ')}` : ''} (σ ${Math.round(cd.zap.sigma)} kPa, FS vuelco ${fmt2(cd.zap.FSvuelco)}${cd.Pup < 0 ? `, succión ${fmt1(-cd.Pup)} kN` : ''})`);
     const colMin = colDesign.reduce((m, cd) => !cd.minimo ? m : !m || costoM(cd.minimo) > costoM(m) ? cd.minimo : m, null);
     if (colMin && colDesign.length && costoM(colMin) < costoM(colDesign[0].sec) - 0.5) {
       const Hs = colDesign.reduce((a, cd) => a + cd.Hc, 0), dkg = (colDesign[0].sec.kgm - colMin.kgm) * Hs;
@@ -2772,7 +2792,7 @@ function applyModoEst() {
       n.visible = !!visible;
       if (n.userData.basePos) { n.position.copy(n.userData.basePos); if (ex && n.userData.est.enTecho) n.position.y += (CAPA_OFF[capa] || 0) * ex; }
     }
-    if (n.isCSS2DObject) n.visible = visible && showDims && viewMode !== 'capas' && (viewMode === 'estructura' || !n.userData.soloEst);
+    if (n.isCSS2DObject) n.visible = visible && ui.nombres !== false && viewMode !== 'capas' && (viewMode === 'estructura' || !n.userData.soloEst);
   });
   // terreno color tierra y semitransparente para ver las fundaciones
   const transp = viewMode === 'estructura' || (viewMode === 'capas' && capaOn('bases'));
@@ -2883,6 +2903,8 @@ $('#snapStep').onchange = e => { snapStep = parseFloat(e.target.value); applySna
 document.querySelectorAll('#viewBtns button').forEach(b => b.onclick = () => setView(b.dataset.view));
 $('#bUndo').onclick = undo; $('#bRedo').onclick = redo;
 $('#bCotas').onclick = e => { showDims = !showDims; e.target.classList.toggle('on', showDims); updateDims(); applyModoEst(); };
+function toggleNombres() { ui.nombres = ui.nombres === false; $('#bNombres').classList.toggle('on', ui.nombres !== false); saveUI(); applyModoEst(); }
+$('#bNombres').onclick = toggleNombres; $('#bNombres').classList.toggle('on', ui.nombres !== false);
 document.querySelectorAll('#modoBtns button').forEach(b => b.onclick = () => setViewMode(b.dataset.modo));
 $('#bEstVer').onclick = () => { setViewMode('estructura'); setView('persp'); };
 $('#bEstCsv').onclick = csvEst;
@@ -2972,6 +2994,7 @@ window.addEventListener('keydown', e => {
   else if (k === 'escape') { if (mode === 'medir') setMode('mover'); else select(null); }
   else if (k === 'f') focusSelected();
   else if (k === 'q') toggleRefVisible();
+  else if (k === 'n') toggleNombres();
   else if (['1', '2', '3', '4'].includes(k)) setView(['persp', 'planta', 'frente', 'lateral'][+k - 1]);
   else if (['5', '6', '7', '8'].includes(k)) setViewMode(['terminado', 'sincielo', 'capas', 'estructura'][+k - 5]);
   else if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'pageup', 'pagedown'].includes(k)) { e.preventDefault(); nudge(k, e.shiftKey); }
