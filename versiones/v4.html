@@ -2929,6 +2929,11 @@ renderer.setAnimationLoop(() => {
 });
 window.__pergola = { get state() { return state; }, get est() { return estRes; }, scene, estGroup, estEntrada, recalcularEstructura, buildDXF3D, buildDXF2D, setView, setViewMode, persp, orbit, defaultState, loadState, computoEst };
 </script>
-<div style="position:fixed;left:50%;bottom:30px;transform:translateX(-50%);z-index:9999;max-width:calc(100% - 24px);box-sizing:border-box;text-align:center;background:#e08a4f;color:#111;font:600 12px/1.35 system-ui,sans-serif;padding:6px 12px;border-radius:12px;box-shadow:0 2px 8px #0006">Versión archivada v4 (19/10/2026): Caños de hasta 2 mm (mercado paraguayo). Guarda sus cambios aparte de tu proyecto. <a href="index.html" style="color:#111">Todas las versiones</a> · <a href="../pergola-3d.html" style="color:#111">Ir a la actual</a></div>
+<script>(() => {
+  // etiqueta de versión archivada en la barra de arriba (no tapa el 3D)
+  const b = document.querySelector('.brand small') || document.querySelector('.brand'); if (!b) return;
+  const ver = b.querySelector('a[href="index.html"]') ? '' : ' · <a href="index.html" style="color:inherit">versiones</a>';
+  b.insertAdjacentHTML('beforeend', ' · <span title="Versión archivada v4 (19/10/2026): Caños de hasta 2 mm (mercado paraguayo). Guarda sus cambios aparte de tu proyecto." style="background:#e08a4f;color:#111;border-radius:6px;padding:0 6px;font-weight:600">v4 archivada</span>' + ver + ' · <a href="../pergola-3d.html" style="color:inherit">ir a la actual</a>');
+})();</script>
 </body>
 </html>
