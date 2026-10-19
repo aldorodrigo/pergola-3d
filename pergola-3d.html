@@ -958,15 +958,15 @@ function defaultState() {
   const a = (...args) => { const o = mkObj(...args); s.objetos.push(o); return o; };
   const piso = a('piso', 'Losa / piso', [0.4, 0, 0.6], 0, { largo: 11.5, ancho: 8.2 });
   s.objetos.push(murallaTV(piso));
-  const techo = a('techo', 'Techo pérgola', [0, 0, 0], 0, { largo: 8.3, ancho: 5.6, banda: 0.55, bandaListones: 4, vigas: 2, lucesX: 6 });
-  s.objetos.push(...columnasPara(techo));
-  a('panelTV', 'Pared de listones + TV', [-1.6, 0, -2.55], 0, { largo: 2.4 });
-  a('celosia', 'Celosía vertical', [0.25, 0, -2.55], 0, { largo: 0.8, listones: 7 });
-  a('isla', 'Isla con parrilla', [3.4, 0, -0.35], -90, { largo: 3.0, prof: 0.8, parrillaLado: 'izq' });
+  const techo = a('techo', 'Techo pérgola', [0, 0, 0], 0, { largo: 10, ancho: 4, banda: 0.55, bandaListones: 4, vigas: 2, lucesX: 6 });
+  s.objetos.push(...columnasPara(techo, 2, 1.6, 0.68));
+  a('panelTV', 'Pared de listones + TV', [-1.6, 0, -1.75], 0, { largo: 2.4 });
+  a('celosia', 'Celosía vertical', [0.25, 0, -1.75], 0, { largo: 0.8, listones: 7 });
+  a('isla', 'Isla con parrilla', [4.05, 0, -0.35], -90, { largo: 3.0, prof: 0.8, parrillaLado: 'izq' });
   // sin muebles (sofás, mesa, banquetas, reposeras): se agregan desde "Agregar objeto"
-  a('ventilador', 'Ventilador 1', [-2.71, 2.75, -0.33]);
+  a('ventilador', 'Ventilador 1', [-3.3, 2.75, -0.33]);
   a('ventilador', 'Ventilador 2', [0, 2.75, -0.33]);
-  a('ventilador', 'Ventilador 3', [2.71, 2.75, -0.33]);
+  a('ventilador', 'Ventilador 3', [3.3, 2.75, -0.33]);
   a('maceta', 'Maceta 1', [-4.75, 0, 2.3], 0, { planta: 'hojas' });
   a('maceta', 'Maceta 2', [4.9, 0, -3.0], 0, { forma: 'redonda', ancho: 0.45, alto: 0.5, planta: 'arbusto', plantaAlto: 0.6, semilla: 2 });
   a('pileta', 'Pileta', [-10.2, 0, 0.3], 0, { largo: 4, ancho: 8.5 });
@@ -2058,9 +2058,13 @@ function disenarEstructura(inp) {
     const dmax = Math.max(...movidas.map((m, i) => Math.hypot(m.x - inp.cols[i].x, m.z - inp.cols[i].z)));
     const alt = dmax > 0.08 ? mejorDiseno(movidas, res.dir) : null;
     const nFund = r => r.avisos.filter(a => /zapata|pileta|muro|muralla/.test(a)).length;
-    if (alt && alt.todoOk && res.costo - alt.costo > 0.04 * res.costo && nFund(alt) <= nFund(res)) {
-      res.sugerencia = { cols: movidas.map(m => ({ id: m.id, nombre: m.nombre, x: m.x, z: m.z })), kg: res.kgAcero - alt.kgAcero, costo: res.costo - alt.costo, dist: dmax, vol: c };
-      avisos.push(`Para ahorrar: si corrés las columnas ${Math.round(dmax * 100)} cm hacia el centro de su fila, la estructura pesa ${Math.round(res.kgAcero - alt.kgAcero)} kg menos (≈ Gs ${miles((res.costo - alt.costo) / 1000)} mil). Usá el botón "Aplicar posición sugerida".`);
+    // se sugiere si ahorra más de un 4 %, o si donde están las columnas la estructura no verifica y corriéndolas sí
+    if (alt && alt.todoOk && (!res.todoOk || res.costo - alt.costo > 0.04 * res.costo) && nFund(alt) <= nFund(res)) {
+      res.sugerencia = { cols: movidas.map(m => ({ id: m.id, nombre: m.nombre, x: m.x, z: m.z })), kg: res.kgAcero - alt.kgAcero, costo: res.costo - alt.costo, dist: dmax, vol: c, verifica: !res.todoOk };
+      const dkg = Math.round(res.kgAcero - alt.kgAcero);
+      avisos.push(!res.todoOk
+        ? `Con las columnas donde están, la estructura no verifica con estos perfiles. Si las corrés ${Math.round(dmax * 100)} cm hacia el centro de su fila, verifica${dkg > 5 ? ` y pesa ${dkg} kg menos` : ''}. Usá el botón "Aplicar posición sugerida".`
+        : `Para ahorrar: si corrés las columnas ${Math.round(dmax * 100)} cm hacia el centro de su fila, la estructura pesa ${dkg} kg menos (≈ Gs ${miles((res.costo - alt.costo) / 1000)} mil). Usá el botón "Aplicar posición sugerida".`);
     }
   }
   res.avisos = [...avisos, ...res.avisos]; res.cargas = cargas; res.cfg = cfg;
@@ -2755,7 +2759,7 @@ function renderEstPanel(res) {
   const { filas, hormigon } = computoEst(res), gt = res.gut, pt = params(estTecho);
   const gs = n => 'Gs ' + miles(n / 1000) + ' mil';
   h += `<p class="hint" style="margin-top:0">Armado apilado: vigas principales sobre las columnas, transversales apoyadas encima y correas C arriba${res.cfg.mercado === 'py' ? ', todo con caños y perfiles de hasta 2 mm del mercado paraguayo (los perfiles grandes se arman soldando 2 caños)' : ''}. Techo de ${fmt2(res.espesor)} m de alto, con pendiente de ${pt.pendiente} % hacia ${LADO_TXT[res.lowSide]}.</p>`;
-  if (res.sugerencia) h += `<div class="btns" style="margin:4px 0 8px"><button id="bEstSug">Aplicar posición sugerida (−${Math.round(res.sugerencia.kg)} kg)</button></div>`;
+  if (res.sugerencia) h += `<div class="btns" style="margin:4px 0 8px"><button id="bEstSug">Aplicar posición sugerida${res.sugerencia.kg > 5 ? ` (−${Math.round(res.sugerencia.kg)} kg)` : ''}</button></div>`;
   h += '<table class="esttab"><tr><th>Elemento</th><th class="n">Cant.</th><th class="n">kg</th></tr>' + filas.map(f =>
     `<tr><td><span class="sw" style="background:${EST_COL[f.grupo]}"></span>${esc(f.desc)}<br><span style="color:var(--muted)">${esc(f.seccion)}${f.L ? ` · ${f.L.toFixed(2)} m` : ''}${f.vol ? ` · ${f.vol.toFixed(2)} m³` : ''}</span></td><td class="n">${f.n}</td><td class="n">${f.kg ? Math.round(f.kg) : '—'}</td></tr>`).join('') +
     `<tr class="tot"><td>Acero estructural</td><td></td><td class="n">${Math.round(res.kgAcero)}</td></tr></table>`;
