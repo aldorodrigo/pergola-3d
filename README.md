@@ -18,6 +18,10 @@ Editor 3D de una pérgola / quincho moderno (estructura de aluminio antracita, c
 - **Vistas** *Terminado*, *Sin cielorraso*, *Capas* (cada parte de la obra en su color, con capas que se prenden, apagan y separan) y *Estructura* (teclas 5–8).
 - **Exportar a AutoCAD**: DXF 3D (mallas por capa) y DXF 2D (planta, vista frontal y lateral con cotas), en metros, centímetros o milímetros. Incluye la opción de exportar solo la estructura metálica y las fundaciones.
 
+## Versiones
+
+Las versiones anteriores se pueden abrir tal como quedaron: https://aldorodrigo.github.io/pergola-3d/versiones/. Están también como etiquetas de git (`v1` a `v4`). Cada versión archivada guarda sus cambios aparte, así que no toca tu proyecto de la versión actual.
+
 ## Uso local
 
 Descargá `pergola-3d.html` junto con la carpeta `referencias/` y abrilo con doble clic en Chrome o Edge (necesita internet para cargar Three.js desde el CDN).

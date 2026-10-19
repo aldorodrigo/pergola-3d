@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versiones · Pérgola 3D</title>
+<style>
+  :root{--bg:#101317;--panel:#171b21;--line:#262c34;--txt:#e6e8eb;--muted:#9aa3ad;--acc:#e08a4f}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 system-ui,sans-serif}
+  main{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+  h1{margin:0 0 4px;font-size:24px} .sub{color:var(--muted);margin:0 0 20px}
+  article{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 14px}
+  h2{margin:0;font-size:18px;color:var(--acc)} h2 small{color:var(--muted);font-weight:400;font-size:13px}
+  h3{margin:2px 0 6px;font-size:15px} p{margin:6px 0} ul{margin:6px 0;padding-left:20px;color:#cfd4da}
+  a{color:var(--acc)} .links{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px}
+  .btn{background:var(--acc);color:#111;text-decoration:none;font-weight:600;padding:6px 12px;border-radius:8px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Versiones del editor</h1>
+  <p class="sub">Cada versión se abre tal como quedó en su momento. Las versiones archivadas guardan sus cambios aparte, así que no tocan tu proyecto de la <a href="../pergola-3d.html">versión actual</a>. Las medidas de estructura son las del diseño original con viento de 45 m/s en entorno de barrio.</p>
+  <article>
+    <h2>v4 <small>19/10/2026 · la actual</small></h2>
+    <h3>Caños de hasta 2 mm (mercado paraguayo)</h3>
+    <p>Todo con caños y perfiles de hasta 2 mm. Ninguna viga cruza la banda de lamas; lo que queda a la vista se dibuja en el terminado. Costo en guaraníes.</p>
+    <ul><li>Vigas principales: 2 caños 150×50×2 soldados uno sobre otro (×2)</li><li>Transversales: caño 150×50×2 (×7)</li><li>Correas: perfil C 75×40×15×2 galvanizado</li><li>Columnas: armadas 200×200 (4 caños 50×50×2 + chapa de 2 mm)</li><li>Lamas con caño 80×40×2 · zapatas 1,30×1,30 m · techo de 62 cm · acero ≈ 1.070 kg</li></ul>
+    <p class="links"><a class="btn" href="v4.html">Abrir v4</a> <a href="https://github.com/aldorodrigo/pergola-3d/tree/111ef4b">código en GitHub (111ef4b)</a></p>
+  </article>
+  <article>
+    <h2>v3 <small>19/10/2026</small></h2>
+    <h3>Techo inclinado y armado apilado</h3>
+    <p>Pendiente 8 % hacia la muralla, vigas apiladas (principales → transversales → correas C), canaleta oculta y vista por capas.</p>
+    <ul><li>Vigas principales: tubo 200×100×3,2 (×2)</li><li>Transversales: tubo 150×50×3,2 (×6)</li><li>Correas: perfil C 80×40×15×2 galvanizado</li><li>Columnas: tubo 200×200×4,75</li><li>Zapatas 1,30×1,30 m · techo de 52 cm · acero ≈ 1.147 kg</li></ul>
+    <p class="links"><a class="btn" href="v3.html">Abrir v3</a> <a href="https://github.com/aldorodrigo/pergola-3d/tree/b236c9c">código en GitHub (b236c9c)</a></p>
+  </article>
+  <article>
+    <h2>v2 <small>19/10/2026</small></h2>
+    <h3>Primera estructura metálica</h3>
+    <p>Techo plano. Predimensionado automático con caños sin límite de espesor, vista sin cielorraso, cómputo CSV.</p>
+    <ul><li>Vigas principales: tubo 200×100×3,2 (×2)</li><li>Transversales: tubo 150×50×3,2 (×6)</li><li>Correas: tubo 80×40×2</li><li>Columnas: tubo 200×200×4,75</li><li>Zapatas 1,10×1,10 m · acero ≈ 1.132 kg</li></ul>
+    <p class="links"><a class="btn" href="v2.html">Abrir v2</a> <a href="https://github.com/aldorodrigo/pergola-3d/tree/03eabfe">código en GitHub (03eabfe)</a></p>
+  </article>
+  <article>
+    <h2>v1 <small>18/10/2026</small></h2>
+    <h3>Editor 3D con exportación a AutoCAD</h3>
+    <p>Modelo 3D editable a partir de las fotos, superposición con las fotos y exportación DXF. Todavía sin cálculo de estructura.</p>
+    
+    <p class="links"><a class="btn" href="v1.html">Abrir v1</a> <a href="https://github.com/aldorodrigo/pergola-3d/tree/70dec01">código en GitHub (70dec01)</a></p>
+  </article>
+</main>
+</body>
+</html>

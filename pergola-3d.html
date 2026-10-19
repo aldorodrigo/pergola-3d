@@ -16,6 +16,7 @@
   header{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
   .brand{font-weight:650;margin-right:4px;white-space:nowrap;letter-spacing:.01em}
   .brand small{color:var(--muted);font-weight:400}
+  .brand small a{color:inherit}
   .grp{display:flex;gap:3px;align-items:center;padding-right:7px;border-right:1px solid var(--line)}
   .grp:last-child{border-right:0}
   .grp.end{margin-left:auto}
@@ -121,7 +122,7 @@
 <body>
 <div id="app">
   <header>
-    <div class="brand">Pérgola 3D <small>editor</small></div>
+    <div class="brand">Pérgola 3D <small>editor · <a href="versiones/index.html" title="Versiones anteriores del editor">versiones</a></small></div>
     <div class="grp mobileonly"><button id="bShowLeft">Objetos</button><button id="bShowRight">Propiedades</button></div>
     <div class="grp">
       <button id="bMover" class="on" title="Mover el objeto seleccionado (W)">Mover</button>
