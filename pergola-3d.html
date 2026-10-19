@@ -1859,7 +1859,7 @@ function vigaFE(L, apoyos, wfun, puntuales, EI) {
 
 
 // ---------- Diseño completo ----------
-const EST_DEF = { viento: 45, exposicion: 'C', cubierta: 'sandwich', cielorraso: 'aluminio', sigmaAdm: 100, profFund: 1.2, sepVT: 2.5, pendiente: 2.5, profPileta: 1.5 };
+const EST_DEF = { viento: 45, exposicion: 'B', cubierta: 'sandwich', cielorraso: 'aluminio', sigmaAdm: 100, profFund: 1.2, sepVT: 2.5, pendiente: 2.5, profPileta: 1.5 };
 const fmt1 = v => (Math.round(v * 10) / 10).toFixed(1), fmt2 = v => (Math.round(v * 100) / 100).toFixed(2);
 function clusters(vals, gap) {
   const idx = vals.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]), out = []; let cur = [];
