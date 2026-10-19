@@ -2681,10 +2681,10 @@ function applyModoEst() {
     if (viewMode === 'estructura') visible = ver && capa !== 'subcielo';
     if (viewMode === 'capas') visible = ver && (!capa || capaOn(capa));
     if (n.isMesh) {
-      const fin = term && (n.userData.vista || n.userData.finOnly);
+      const fin = term && !!(n.userData.vista || n.userData.finOnly);
       if (term) visible = ok && fin; else if (n.userData.finOnly) visible = false;
       n.material = fin ? FIN_MAT[n.userData.acabado] || FIN_MAT.aluminio : n.userData.matEst || n.material;
-      n.visible = visible;
+      n.visible = !!visible;
       if (n.userData.basePos) { n.position.copy(n.userData.basePos); if (ex && n.userData.est.enTecho) n.position.y += (CAPA_OFF[capa] || 0) * ex; }
     }
     if (n.isCSS2DObject) n.visible = visible && showDims && viewMode !== 'capas' && (viewMode === 'estructura' || !n.userData.soloEst);
@@ -2932,7 +2932,7 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 });
-window.__pergola = { get state() { return state; }, get est() { return estRes; }, estEntrada, recalcularEstructura, buildDXF3D, buildDXF2D, setView, setViewMode, persp, orbit, defaultState, loadState, computoEst };
+window.__pergola = { get state() { return state; }, get est() { return estRes; }, scene, estGroup, estEntrada, recalcularEstructura, buildDXF3D, buildDXF2D, setView, setViewMode, persp, orbit, defaultState, loadState, computoEst };
 </script>
 </body>
 </html>
