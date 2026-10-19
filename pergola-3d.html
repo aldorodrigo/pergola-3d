@@ -226,6 +226,8 @@
         <div class="row"><label>Suelo (σ adm)</label><select data-est="sigmaAdm"><option value="50">Blando · 0,5 kg/cm²</option><option value="70">Medio · 0,7 kg/cm²</option><option value="100">Firme · 1,0 kg/cm²</option><option value="150">Muy firme · 1,5 kg/cm²</option></select></div>
         <div class="row"><label>Prof. fundación</label><select data-est="profFund"><option value="1">1,00 m</option><option value="1.2">1,20 m</option><option value="1.5">1,50 m</option></select></div>
         <div class="row"><label>Sep. máx. vigas</label><select data-est="sepVT"><option value="1.5">1,50 m</option><option value="2">2,00 m</option><option value="2.5">2,50 m</option></select></div>
+        <div class="row"><label>Bajadas pluviales</label><select data-est="bajadas"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+        <div class="row"><label>Diámetro de bajadas</label><select data-est="diamBajada"><option value="75">Ø75 mm (3")</option><option value="100">Ø100 mm (4")</option><option value="110">Ø110 mm</option></select></div>
         <div class="row"><label>Lluvia de diseño</label><select data-est="lluvia"><option value="120">120 mm/h (moderada)</option><option value="150">150 mm/h (fuerte)</option><option value="200">200 mm/h (tormenta intensa)</option><option value="250">250 mm/h (extrema)</option></select></div>
         <div class="row"><label>Armado del techo</label><select data-est="armado"><option value="enrasado">Enrasado: transversales al costado de las principales (techo más bajo)</option><option value="apilado">Apilado: transversales encima de las principales</option></select></div>
         <div class="row"><label>Perfiles</label><select data-est="mercado"><option value="py">Mercado paraguayo · hasta 2 mm</option><option value="libre">Sin límite de espesor</option></select></div>
@@ -959,17 +961,18 @@ function columnasPara(techo, porLado = 2, retX = 1.35, retZ = 0.65) {
 function defaultState() {
   const s = { version: 2, materiales: {}, vistas: {}, export: { units: 'm' }, estructura: {}, objetos: [] };
   const a = (...args) => { const o = mkObj(...args); s.objetos.push(o); return o; };
-  const piso = a('piso', 'Losa / piso', [0.4, 0, 0.6], 0, { largo: 11.5, ancho: 8.2 });
+  const piso = a('piso', 'Losa / piso', [0.4, 0, 1.1], 0, { largo: 11.5, ancho: 7.2 });   // termina en el borde de atrás del techo: la muralla queda pegada a la pérgola
   s.objetos.push(murallaTV(piso));
-  const techo = a('techo', 'Techo pérgola', [0, 0, 0], 0, { largo: 10, ancho: 5, banda: 1.4, bandaListones: 6, vigas: 2, lucesX: 6 });
-  s.objetos.push(...columnasPara(techo, 2, 1.6, 0.68).map(c => { if (c.pos[2] > 0) c.pos[2] = 0.97; return c; }));   // las del frente, bajo la viga de la banda
+  a('muro', 'Muralla recrecida bajo la pérgola', [0, 2.4, -2.4], 0, { largo: 10, alto: 0.35, espesor: 0.2, coronamiento: false });   // llega hasta el techo: las bajadas quedan embutidas
+  const techo = a('techo', 'Techo pérgola', [0, 0, 0], 0, { largo: 10, ancho: 5, banda: 0.7, bandaListones: 4, vigas: 2, lucesX: 6 });
+  s.objetos.push(...columnasPara(techo, 2, 1.6, 0.8).map(c => { if (c.pos[2] > 0) c.pos[2] = 1.67; return c; }));   // las del frente, bajo la viga de la banda
   a('panelTV', 'Pared de listones + TV', [-1.6, 0, -2.25], 0, { largo: 2.4 });
   a('celosia', 'Celosía vertical', [0.25, 0, -2.25], 0, { largo: 0.8, listones: 7 });
   a('isla', 'Isla con parrilla', [4.05, 0, -0.6], -90, { largo: 2.8, prof: 0.8, parrillaLado: 'izq' });
   // sin muebles (sofás, mesa, banquetas, reposeras): se agregan desde "Agregar objeto"
-  a('ventilador', 'Ventilador 1', [-3.3, 2.75, -0.75]);
-  a('ventilador', 'Ventilador 2', [0, 2.75, -0.75]);
-  a('ventilador', 'Ventilador 3', [3.3, 2.75, -0.75]);
+  a('ventilador', 'Ventilador 1', [-3.3, 2.75, -0.4]);
+  a('ventilador', 'Ventilador 2', [0, 2.75, -0.4]);
+  a('ventilador', 'Ventilador 3', [3.3, 2.75, -0.4]);
   a('maceta', 'Maceta 1', [-4.75, 0, 2.3], 0, { planta: 'hojas' });
   a('maceta', 'Maceta 2', [4.9, 0, -3.0], 0, { forma: 'redonda', ancho: 0.45, alto: 0.5, planta: 'arbusto', plantaAlto: 0.6, semilla: 2 });
   a('pileta', 'Pileta', [-10.2, 0, 0.3], 0, { largo: 4, ancho: 8.5 });
@@ -1935,7 +1938,7 @@ function vigaFE(L, apoyos, wfun, puntuales, EI) {
 
 
 // ---------- Diseño completo: armado apilado (vigas principales → transversales → correas C), techo inclinado ----------
-const EST_DEF = { viento: 45, exposicion: 'B', cubierta: 'sandwich', cielorraso: 'aluminio', sigmaAdm: 100, profFund: 1.2, sepVT: 2.5, profPileta: 1.5, lluvia: 200, mercado: 'py', precioKg: 11000, armado: 'enrasado' };
+const EST_DEF = { viento: 45, exposicion: 'B', cubierta: 'sandwich', cielorraso: 'aluminio', sigmaAdm: 100, profFund: 1.2, sepVT: 2.5, profPileta: 1.5, lluvia: 200, mercado: 'py', precioKg: 11000, armado: 'enrasado', bajadas: 3, diamBajada: 75 };
 const miles = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const fmt1 = v => (Math.round(v * 10) / 10).toFixed(1), fmt2 = v => (Math.round(v * 100) / 100).toFixed(2);
 // Perfil C galvanizado con labios (mm), propiedades por líneas medias
@@ -2007,14 +2010,15 @@ function catalogo(mercado) {
 const nomSec = s => /^\d+×/.test(s.nombre) ? `tubo ${s.nombre}` : s.nombre;
 const NomSec = s => { const n = nomSec(s); return n[0].toUpperCase() + n.slice(1); };
 // Canaleta oculta: caudal de lluvia, sección (Manning, chapa n = 0,011, caída 0,5 %) y bocas de bajada Ø100
-function disenarCanaleta(area, lluvia, depthMax) {
+// nPedido / diam: cantidad y diámetro (mm) de bajadas elegidos; se agregan bajadas si no alcanzan para 1,5 veces el caudal
+function disenarCanaleta(area, lluvia, depthMax, nPedido = 2, diam = 100) {
   const Q = lluvia * area / 3600;                       // L/s
   const cap = (b, d) => { const y = Math.max(0.02, d - 0.03), A = b * y, Rh = A / (b + 2 * y); return 1000 * A * Rh ** (2 / 3) * Math.sqrt(0.005) / 0.011; };
   const d = Math.max(0.08, Math.min(0.15, depthMax));
   const b = [0.15, 0.2, 0.25, 0.3].find(b => cap(b, d) >= 2 * Q) || 0.3;
-  const Qboca = 1000 * 0.6 * Math.PI * 0.05 ** 2 * Math.sqrt(2 * 9.81 * 0.03);  // boca Ø100 con 3 cm de agua
-  const nBaj = Math.max(2, Math.ceil(1.5 * Q / Qboca));
-  return { Q, b, d, cap: cap(b, d), nBaj, Qboca, capBaj: nBaj * Qboca };
+  const dInt = (diam - 3) / 1000, Qboca = 1000 * 0.6 * Math.PI * (dInt / 2) ** 2 * Math.sqrt(2 * 9.81 * 0.03);  // boca con 3 cm de agua (diámetro interior del PVC)
+  const nMin = Math.max(1, Math.ceil(1.5 * Q / Qboca)), nBaj = Math.max(nMin, nPedido | 0 || 2);
+  return { Q, b, d, cap: cap(b, d), nBaj, nMin, faltan: nBaj > (nPedido | 0 || 2), Qboca, capBaj: nBaj * Qboca, diam };
 }
 function clusters(vals, gap) {
   const idx = vals.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]), out = []; let cur = [];
@@ -2278,7 +2282,7 @@ function disenarEstructura(inp) {
       for (const [k, cs] of Object.entries(casos)) fe[k] = vigaFE(Lc, ap, () => cs.qc * tribMax + cs.g * FASC * 0.5, [], EIref), fe[k + '1'] = vigaFE(Lc, ap, () => 1, [], EIref);
       return { fe, tribMax };
     };
-    let gut = disenarCanaleta(areaC, cfg.lluvia, 0.12), vCor = lineasCorrea(gut.b), cf = corFE(vCor);
+    let gut = disenarCanaleta(areaC, cfg.lluvia, 0.12, cfg.bajadas, cfg.diamBajada), vCor = lineasCorrea(gut.b), cf = corFE(vCor);
     const tMinC = py && !hayPileta ? 1.8 : 2;
     const selCor = elegir(cat.correas, sec => sec.t >= tMinC - 1e-6 && entraFascia(sec), sec => {
       const sw = sec.kgm * 0.00981, e = evalViga(cf.fe, sec, sw);
@@ -2286,7 +2290,8 @@ function disenarEstructura(inp) {
       return { ...e, util: Math.max(e.Mu / sec.phiMn, Mup / sec.phiMnUp) };
     });
     const COR = selCor.sec;
-    gut = disenarCanaleta(areaC, cfg.lluvia, COR.h + 0.03 - 0.01);
+    gut = disenarCanaleta(areaC, cfg.lluvia, COR.h + 0.03 - 0.01, cfg.bajadas, cfg.diamBajada);
+    if (gut.faltan) av.push(`Con ${cfg.bajadas} bajadas de Ø${cfg.diamBajada} no alcanza para la lluvia de diseño con margen: hacen falta ${gut.nBaj}.`);
     vCor = lineasCorrea(gut.b);
     // --- alturas (marco del techo antes de inclinar) y alto de la fascia ---
     const yVPb = R.h + 0.045;
@@ -2379,7 +2384,7 @@ function disenarEstructura(inp) {
         if (libre < 0.6) av.push(`${c.nombre}: la zapata queda a ${Math.max(0, libre).toFixed(2)} m de la ${pl.nombre}: riesgo de tocar el relleno, la pared o los caños. Alejá la columna o consultá a un ingeniero.`);
         else if (Df + libre < cfg.profPileta + 0.3) av.push(`${c.nombre}: la zapata (a ${libre.toFixed(2)} m de la ${pl.nombre}) carga la pared de la pileta. Fundar a ${fmt2(cfg.profPileta + 0.3 - libre)} m o más, o alejarla.`);
       }
-      for (const mu of inp.walls || []) if (distPoly(c.x, c.z, mu.poly) < zap.B / Math.SQRT2) av.push(`${c.nombre}: la zapata (${fmt2(zap.B)} m) se superpone con el cimiento de la ${mu.nombre}. Hacé una zapata combinada con el cimiento del muro, o una zapata excéntrica.`);
+      for (const mu of inp.walls || []) if (!mu.elevado && distPoly(c.x, c.z, mu.poly) < zap.B / Math.SQRT2) av.push(`${c.nombre}: la zapata (${fmt2(zap.B)} m) se superpone con el cimiento de la ${mu.nombre}. Hacé una zapata combinada con el cimiento del muro, o una zapata excéntrica.`);
       colDesign.push({ c, vp, ...elegido, w, d, revestir, Mr, Ms, Vs, Pup, bp, tp, dB, hef, zap, yCap, minimo: minimo && minimo.sec, fija, gx, gz });
     });
     // --- miembros (enTecho: van en el plano inclinado del techo; el resto, a plomo) ---
@@ -2456,10 +2461,11 @@ function disenarEstructura(inp) {
     let embutidas = false, vistaBaj = 0;
     for (const s of salidas) {
       const [x, , z] = gutLinea.tipo === 'v' ? P3(s, gutLinea.v, 0) : P3(gutLinea.u, s, 0);
-      const muro = (inp.walls || []).find(mu => distPoly(x, z, mu.poly) < 0.05), yCielo = R.h + rise(x, z), yTop = yCielo + (yCb - R.h) - 0.01;
-      const yMuro = muro ? Math.min(muro.alto || 0, yCielo) : 0.02;
+      // muros donde cae la bajada (puede haber un recrecido encima de la muralla): se embute hasta el más alto
+      const muros = (inp.walls || []).filter(mu => distPoly(x, z, mu.poly) < 0.05), muro = muros[0], yCielo = R.h + rise(x, z), yTop = yCielo + (yCb - R.h) - 0.01;
+      const yMuro = muro ? Math.min(Math.max(...muros.map(mu => mu.alto || 0)), yCielo) : 0.02;
       embutidas = embutidas || !!muro;
-      const baj = (y0, y1, extra) => y1 - y0 > 0.01 && add({ grupo: 'BA', nombre: muro ? 'Bajada pluvial embutida en la muralla' : 'Bajada pluvial', seccion: 'Caño PVC Ø110', kgm: 0, r: 0.055, cyl: true, p0: [x, y0, z], p1: [x, y1, z], ...extra });
+      const baj = (y0, y1, extra) => y1 - y0 > 0.01 && add({ grupo: 'BA', nombre: muro ? 'Bajada pluvial embutida en la muralla' : 'Bajada pluvial', seccion: `Caño PVC Ø${gut.diam}`, kgm: 0, r: gut.diam / 2000, cyl: true, p0: [x, y0, z], p1: [x, y1, z], ...extra });
       if (muro) baj(0.02, yMuro);
       if (yCielo - yMuro > 0.05) { baj(yMuro, yCielo, { vista: true, acabado: 'pvc' }); vistaBaj = Math.max(vistaBaj, yCielo - yMuro); }
       baj(Math.max(yMuro, yCielo), yTop);
@@ -2553,7 +2559,7 @@ function disenarEstructura(inp) {
       const br = bandaRes;
       checks.push(`${mark(br.ok)} Banda de lamas: ${br.n} lamas con ${nomSec(br.lama.s)} adentro, de ${fmt2(br.sMax)} m entre apoyos (uso ${pct(br.lama.util)}, flecha ${Math.round(br.lama.f * 1000)} mm) · fascia de la banda con 2 cordones ${nomSec(br.cord.s)} contra el viento (uso ${pct(br.cord.util)}, flecha ${Math.round(br.cord.f * 1000)} mm) · ${br.sel.length ? `${br.sel.length} línea(s) de separadores (tacos del mismo caño entre las lamas, momento ${fmt1(br.Mlad)} kN·m)` : 'sin separadores: las lamas van de punta a punta'}${bastLat ? ` · bastidores laterales ${nomSec(bastLat.sec)} (uso ${pct(bastLat.util)})` : ''}`);
     }
-    checks.push(`✓ Canaleta oculta ${Math.round(gut.b * 1000)}×${Math.round(gut.d * 1000)} mm: lluvia de ${cfg.lluvia} mm/h sobre ${fmt1(areaC)} m² → caudal ${fmt1(gut.Q)} L/s; capacidad ${fmt1(gut.cap)} L/s con 0,5 % de caída · ${gut.nBaj} bajadas Ø110 (${fmt1(gut.capBaj)} L/s)${embutidas ? ' embutidas en la muralla' : ''} · 2 gárgolas de rebalse`);
+    checks.push(`✓ Canaleta oculta ${Math.round(gut.b * 1000)}×${Math.round(gut.d * 1000)} mm: lluvia de ${cfg.lluvia} mm/h sobre ${fmt1(areaC)} m² → caudal ${fmt1(gut.Q)} L/s; capacidad ${fmt1(gut.cap)} L/s con 0,5 % de caída · ${gut.nBaj} bajadas Ø${gut.diam} (${fmt1(gut.capBaj)} L/s, ${fmt1(gut.capBaj / gut.Q)} veces el caudal)${embutidas ? ' embutidas en la muralla' : ''} · 2 gárgolas de rebalse`);
     for (const cd of colDesign) checks.push(`${mark(cd.ok)} ${cd.c.nombre}, ${nomSec(cd.sec)}${cd.fija ? (cd.fija.union === 'extremos' ? ' unidos solo abajo (placa base) y arriba (capitel)' : ' unidos con separadores cada 50 cm') : ''} (alto ${fmt2(cd.Hc)} m): Pu ${fmt1(cd.Pu)} kN, Mu base ${fmt1(cd.Mr)} kN·m, uso ${pct(cd.inter)} · desplazamiento por viento ${Math.round(cd.drift * 1000)} mm · placa ${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm con 4 pernos Ø${cd.dB} · zapata ${fmt2(cd.zap.B)}×${fmt2(cd.zap.B)}×${fmt2(cd.zap.H)} m a −${fmt2(cd.zap.Df)} m (σ ${Math.round(cd.zap.sigma)} kPa, FS vuelco ${fmt2(cd.zap.FSvuelco)}${cd.Pup < 0 ? `, succión ${fmt1(-cd.Pup)} kN` : ''})`);
     const colMin = colDesign.reduce((m, cd) => !cd.minimo ? m : !m || costoM(cd.minimo) > costoM(m) ? cd.minimo : m, null);
     if (colMin && colDesign.length && costoM(colMin) < costoM(colDesign[0].sec) - 0.5) {
@@ -2671,7 +2677,7 @@ function estEntrada() {
       tipoCol: q.estructura, pa: q.ancho, pp: q.prof, aletas: { n: na, esp: q.aletaEsp, prof: q.aletaProf, sep: q.aletaSep, union: q.aletaUnion }, finDir, perpDir, alinZ };
   }).filter(c => Math.abs(c.x) <= p.largo / 2 + 0.3 && Math.abs(c.z) <= p.ancho / 2 + 0.3);
   const pools = state.objetos.filter(o => o.tipo === 'pileta' && o.visible !== false).map(o => { const q = params(o); return { nombre: o.nombre, poly: rectLoc(o, q.largo, q.ancho) }; });
-  const walls = state.objetos.filter(o => o.tipo === 'muro' && o.visible !== false).map(o => { const q = params(o); return { nombre: o.nombre, alto: o.pos[1] + q.alto, poly: rectLoc(o, q.largo, q.espesor, 0.15) }; });
+  const walls = state.objetos.filter(o => o.tipo === 'muro' && o.visible !== false).map(o => { const q = params(o); return { nombre: o.nombre, alto: o.pos[1] + q.alto, elevado: o.pos[1] > 0.05, poly: rectLoc(o, q.largo, q.espesor, 0.15) }; });
   const roof = { L: p.largo, W: p.ancho, h: p.altura, e: espesorEf(techo), t: Z.t, C: Z.C, band: Z.band, beam: Z.beam, bandSide: Z.lado, p: (p.pendiente || 0) / 100, lowSide: p.ladoBajo, eAuto: !!p.espesorAuto, cieloDir: p.cieloDir,
     lamas: { n: p.bandaListones | 0, sa: p.bandaAlto, se: p.bandaEsp } };
   return { techo, inp: { roof, cols, pools, walls, cfg: cfgEst() } };
@@ -2792,7 +2798,7 @@ function renderCapas() {
   const r = estRes && estRes.ok ? estRes : null, techo = state.objetos.find(o => o.tipo === 'techo' && o.visible !== false), pt = techo ? params(techo) : null;
   const det = {
     cubierta: pt ? `${(cfgEst().cubierta === 'chapa' ? 'Chapa trapezoidal' : 'Panel sándwich 30 mm')}, pendiente ${pt.pendiente} %` : '',
-    canaleta: r ? `${Math.round(r.gut.b * 1000)}×${Math.round(r.gut.d * 1000)} mm, ${r.gut.nBaj} bajadas Ø110${r.embutidas ? ' embutidas' : ''}` : '',
+    canaleta: r ? `${Math.round(r.gut.b * 1000)}×${Math.round(r.gut.d * 1000)} mm, ${r.gut.nBaj} bajadas Ø${r.gut.diam}${r.embutidas ? ' embutidas' : ''}` : '',
     correas: r ? `${r.COR.nombre}, continuas` : '', vt: r ? `${NomSec(r.VT)} ×${r.vts.length}` : '', vp: r ? `${NomSec(r.lines[0].sec)} ×${r.lines.length}` : '',
     columnas: r && r.colDesign.length ? NomSec(r.colDesign[0].sec) : '', fascia: 'ACM 4 mm sobre bastidor', banda: r && r.banda ? `${r.banda.n} lamas con ${nomSec(r.banda.lama.s)} adentro${r.banda.sel.length ? `, ${r.banda.sel.length} línea(s) de separadores` : ''}` : pt ? `${pt.bandaListones} lamas` : '',
     subcielo: 'Omega c/0,80 m + varillas Ø6', cielorraso: cfgEst().cielorraso === 'wpc' ? 'Lamas WPC' : 'Lamas de aluminio símil madera',
@@ -2845,7 +2851,7 @@ function renderEstPanel(res) {
   h += `<table class="esttab"><tr><th>Costo aproximado de materiales</th><th class="n">Gs</th></tr><tr><td>Acero (Gs ${miles(res.cfg.precioKg)}/kg; las piezas armadas suman 15 % de soldadura)</td><td class="n">${gs(res.costoAcero)}</td></tr><tr><td>Hormigón de fundaciones (${res.volHorm.toFixed(2)} m³) con su hierro</td><td class="n">${gs(res.costoHorm)}</td></tr><tr class="tot"><td>Total estructura (sin mano de obra, pintura ni cubierta)</td><td class="n">${gs(res.costo)}</td></tr></table>`;
   h += `<p class="hint">${(res.kgAcero / res.area).toFixed(1)} kg de acero por m² de techo · hormigón ${hormigon.toFixed(2)} m³.</p>`;
   if (res.banda) { const b = res.banda; h += `<p class="hint"><b>Banda de lamas:</b> ninguna viga la cruza. Las ${b.n} lamas llevan un ${esc(nomSec(b.lama.s))} adentro${b.lama.s.h < Math.min(b.saDis, res.espesor) - 0.01 ? `, revestido hasta ${Math.round(b.saDis * 1000)}×${Math.round(b.se * 1000)} mm` : ''}, y van de fascia a fascia apoyadas en la estructura escondida dentro de las fascias${b.sel.length ? `, más ${b.sel.length} línea${b.sel.length > 1 ? 's' : ''} de separadores (tacos del mismo caño soldados entre las lamas, terminados igual que ellas) que sostienen la fascia contra el viento. Los separadores son lo único de la estructura que se ve, y aparecen también en la vista Terminado` : ''}.</p>`; }
-  h += `<p class="hint"><b>Lluvia:</b> ${res.cfg.lluvia} mm/h sobre ${fmt1(gt.Q * 3600 / res.cfg.lluvia)} m² dan ${fmt1(gt.Q)} L/s. La canaleta oculta de ${Math.round(gt.b * 1000)}×${Math.round(gt.d * 1000)} mm lleva ${fmt1(gt.cap)} L/s (${fmt1(gt.cap / gt.Q)} veces lo necesario, por las hojas). Bajan por ${gt.nBaj} caños Ø110${res.embutidas ? ' embutidos en la muralla' : ''}, y tiene 2 gárgolas de rebalse por si se tapa.</p>`;
+  h += `<p class="hint"><b>Lluvia:</b> ${res.cfg.lluvia} mm/h sobre ${fmt1(gt.Q * 3600 / res.cfg.lluvia)} m² dan ${fmt1(gt.Q)} L/s. La canaleta oculta de ${Math.round(gt.b * 1000)}×${Math.round(gt.d * 1000)} mm lleva ${fmt1(gt.cap)} L/s (${fmt1(gt.cap / gt.Q)} veces lo necesario, por las hojas). Bajan por ${gt.nBaj} caños Ø${gt.diam} (juntos llevan ${fmt1(gt.capBaj)} L/s, ${fmt1(gt.capBaj / gt.Q)} veces el caudal)${res.embutidas ? ' embutidos en la muralla' : ''}, y tiene 2 gárgolas de rebalse por si se tapa.</p>`;
   const c = res.cargas;
   h += `<details class="esthip"><summary>Verificaciones (${res.checks.length})</summary><ul class="estchk">${res.checks.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
     <p class="hint">Cargas: permanente ${c.Dc.toFixed(2)} kN/m² · mantenimiento ${c.Lr.toFixed(2)} kN/m² · presión de viento ${c.qh.toFixed(2)} kN/m² (V ${res.cfg.viento} m/s) · combinación de diseño ${c.qU.toFixed(2)} kN/m² hacia abajo y ${(-c.qUP).toFixed(2)} kN/m² de succión. Uso máximo admitido 85 %, flechas L/300.</p></details>`;
