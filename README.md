@@ -12,7 +12,9 @@ Editor 3D de una pérgola / quincho moderno (estructura de aluminio antracita, c
 - **Comparar con fotos**: superpone una foto de referencia sobre el 3D (opacidad, modo diferencia) para ajustar el modelo al original.
 - **Medir** distancias, vistas de planta, frente y lateral, cotas y modo noche.
 - **Guardar** el proyecto (automático en el navegador y como archivo `.json`).
-- **Estructura metálica**: vistas *Terminado*, *Sin cielorraso* y *Estructura* (teclas 5–7). Predimensiona automáticamente vigas principales, vigas transversales, correas, columnas, placas base, pernos y zapatas según la posición de las columnas, con cómputo de materiales descargable (CSV). Es un predimensionado orientativo: debe verificarlo un profesional matriculado antes de construir.
+- **Techo inclinado**: pendiente y lado bajo configurables; columnas, paneles y ventiladores llegan solos al cielorraso inclinado.
+- **Estructura metálica**: armado apilado (vigas principales sobre columnas, transversales encima y correas C arriba). Predimensiona automáticamente perfiles, columnas, placas base, pernos y zapatas según la posición de las columnas, ajusta el alto del techo al paquete de la estructura y dimensiona la canaleta oculta según la lluvia de diseño. Cómputo de materiales descargable (CSV). Es un predimensionado orientativo: debe verificarlo un profesional matriculado antes de construir.
+- **Vistas** *Terminado*, *Sin cielorraso*, *Capas* (cada parte de la obra en su color, con capas que se prenden, apagan y separan) y *Estructura* (teclas 5–8).
 - **Exportar a AutoCAD**: DXF 3D (mallas por capa) y DXF 2D (planta, vista frontal y lateral con cotas), en metros, centímetros o milímetros. Incluye la opción de exportar solo la estructura metálica y las fundaciones.
 
 ## Uso local
@@ -31,6 +33,6 @@ Descargá `pergola-3d.html` junto con la carpeta `referencias/` y abrilo con dob
 | Ctrl+Z / Ctrl+Y | deshacer / rehacer |
 | Q | mostrar / ocultar la foto de referencia |
 | 1 – 4 | vista 3D, planta, frente, lateral |
-| 5 – 7 | terminado, sin cielorraso, estructura |
+| 5 – 8 | terminado, sin cielorraso, capas, estructura |
 
 Hecho con [Three.js](https://threejs.org).

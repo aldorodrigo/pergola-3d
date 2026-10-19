@@ -86,6 +86,15 @@
   .estav p{margin:3px 0}
   details.esthip summary{cursor:pointer;color:var(--accent);font-size:12px;margin:8px 0 4px}
   .esthip .row{grid-template-columns:120px minmax(0,1fr)}
+  .capas{position:absolute;right:10px;top:8px;z-index:3;width:250px;max-height:calc(100% - 16px);overflow:auto;background:rgba(16,19,23,.9);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px}
+  .capas[hidden]{display:none}
+  .capas-h{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:650;margin-bottom:4px}
+  .capa{display:flex;gap:7px;align-items:flex-start;padding:3px 0;cursor:pointer}
+  .capa input{margin:2px 0 0}
+  .capa .sw{flex:0 0 12px;height:12px;border-radius:3px;margin-top:2px}
+  .capa small{display:block;color:var(--muted);font-size:11px}
+  .capas-sl{display:block;margin-top:8px;color:var(--text)}
+  .capas-sl span{display:block;margin-bottom:2px}
   #viewTag{position:absolute;left:10px;top:8px;background:rgba(16,19,23,.75);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:12px;color:var(--muted);pointer-events:none;z-index:3}
   #toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(16,19,23,.92);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:3;max-width:90%}
   #toast.show{opacity:1}
@@ -134,7 +143,8 @@
     <div class="grp" id="modoBtns" title="Qué mostrar del techo">
       <button data-modo="terminado" class="on" title="Pérgola terminada (5)">Terminado</button>
       <button data-modo="sincielo" title="Oculta el cielorraso para ver la estructura de arriba (6)">Sin cielorraso</button>
-      <button data-modo="estructura" title="Solo la estructura metálica y las fundaciones (7)">Estructura</button>
+      <button data-modo="capas" title="Cada parte de la obra en su color, con capas que se pueden separar (7)">Capas</button>
+      <button data-modo="estructura" title="Solo la estructura metálica y las fundaciones (8)">Estructura</button>
     </div>
     <div class="grp">
       <button id="bUndo" title="Deshacer (Ctrl+Z)">↶ Deshacer</button>
@@ -182,7 +192,7 @@
         <dt>Ctrl+Z / Y</dt><dd>deshacer / rehacer</dd>
         <dt>Q</dt><dd>mostrar/ocultar foto</dd>
         <dt>1 – 4</dt><dd>3D, planta, frente, lateral</dd>
-        <dt>5 – 7</dt><dd>terminado, sin cielorraso, estructura</dd>
+        <dt>5 – 8</dt><dd>terminado, sin cielorraso, capas, estructura</dd>
       </dl>
     </section>
   </aside>
@@ -191,6 +201,11 @@
     <img id="refImg" alt="">
     <div id="viewTag">Vista 3D</div>
     <div id="toast"></div>
+    <div id="capasPanel" class="capas" hidden>
+      <div class="capas-h">Capas de la obra</div>
+      <div id="capasList"></div>
+      <label class="capas-sl"><span>Separar capas</span><input type="range" id="explode" min="0" max="1" step="0.01" value="0.35"></label>
+    </div>
   </main>
 
   <aside id="right">
@@ -210,7 +225,7 @@
         <div class="row"><label>Suelo (σ adm)</label><select data-est="sigmaAdm"><option value="50">Blando · 0,5 kg/cm²</option><option value="70">Medio · 0,7 kg/cm²</option><option value="100">Firme · 1,0 kg/cm²</option><option value="150">Muy firme · 1,5 kg/cm²</option></select></div>
         <div class="row"><label>Prof. fundación</label><select data-est="profFund"><option value="1">1,00 m</option><option value="1.2">1,20 m</option><option value="1.5">1,50 m</option></select></div>
         <div class="row"><label>Sep. máx. vigas</label><select data-est="sepVT"><option value="1.5">1,50 m</option><option value="2">2,00 m</option><option value="2.5">2,50 m</option></select></div>
-        <div class="row"><label>Pendiente techo</label><select data-est="pendiente"><option value="2">2 %</option><option value="2.5">2,5 %</option><option value="3">3 %</option></select></div>
+        <div class="row"><label>Lluvia de diseño</label><select data-est="lluvia"><option value="120">120 mm/h (moderada)</option><option value="150">150 mm/h (fuerte)</option><option value="200">200 mm/h (tormenta intensa)</option><option value="250">250 mm/h (extrema)</option></select></div>
         <div class="row"><label>Prof. pileta</label><select data-est="profPileta"><option value="1.2">1,20 m</option><option value="1.5">1,50 m</option><option value="1.8">1,80 m</option><option value="2.2">2,20 m</option></select></div>
         <p class="hint">Cargas según CIRSOC 101/102 (equivalente ASCE 7) y diseño LRFD de tubos estructurales F-24 (Fy 250 MPa). La estructura se recalcula sola al mover columnas o cambiar medidas.</p>
       </details>
@@ -503,8 +518,32 @@ function techoZonas(p) {
 // Marca a qué parte pertenece una malla (para las vistas "Sin cielorraso" y "Estructura")
 const tag = (m, parte) => { m.userData.parte = parte; return m; };
 
-function buildTecho(g, p) {
-  const { L, W, t, C, band, beam, alongX } = techoZonas(p), h = p.altura, e = p.espesor, yc = h + e / 2;
+// Inclinación del techo: todo el paquete gira alrededor del borde inferior del lado bajo
+function techoInclinacion(p) {
+  const a = Math.atan((p.pendiente || 0) / 100), h = p.altura;
+  const t = { fondo: { piv: [0, h, -p.ancho / 2], rot: [-a, 0, 0] }, frente: { piv: [0, h, p.ancho / 2], rot: [a, 0, 0] },
+    izq: { piv: [-p.largo / 2, h, 0], rot: [0, 0, a] }, der: { piv: [p.largo / 2, h, 0], rot: [0, 0, -a] } };
+  return t[p.ladoBajo] || t.fondo;
+}
+function grupoInclinado(parent, p) {
+  const t = techoInclinacion(p), piv = new THREE.Group(), body = new THREE.Group();
+  piv.position.fromArray(t.piv); piv.rotation.set(...t.rot); body.position.set(-t.piv[0], -t.piv[1], -t.piv[2]);
+  piv.add(body); parent.add(piv); return body;
+}
+// Alto del techo (fascia): si está en automático, el que pide la estructura calculada
+const ESP_AUTO = new Map();
+function espesorEf(o) { const p = params(o); return p.espesorAuto && ESP_AUTO.has(o.id) ? ESP_AUTO.get(o.id) : p.espesor; }
+// Altura del cielorraso (cara inferior del techo inclinado) sobre un punto del mundo
+function alturaCieloEn(techo, wx, wz) {
+  const p = params(techo), ry = techo.rot[1], dx = wx - techo.pos[0], dz = wz - techo.pos[2];
+  const x = dx * Math.cos(ry) - dz * Math.sin(ry), z = dx * Math.sin(ry) + dz * Math.cos(ry);
+  const d = { fondo: z + p.ancho / 2, frente: p.ancho / 2 - z, izq: x + p.largo / 2, der: p.largo / 2 - x }[p.ladoBajo] ?? 0;
+  return techo.pos[1] + p.altura + (p.pendiente || 0) / 100 * Math.max(0, d);
+}
+
+function buildTecho(G, p, o) {
+  const g = grupoInclinado(G, p);
+  const { L, W, t, C, band, beam, alongX } = techoZonas(p), h = p.altura, e = o ? espesorEf(o) : p.espesor, yc = h + e / 2;
   tag(box(g, L, e, t, 0, yc, W / 2 - t / 2, 'aluminio', 'PERGOLA-FASCIA'), 'fascia');
   tag(box(g, L, e, t, 0, yc, -W / 2 + t / 2, 'aluminio', 'PERGOLA-FASCIA'), 'fascia');
   tag(box(g, t, e, W - 2 * t, L / 2 - t / 2, yc, 0, 'aluminio', 'PERGOLA-FASCIA'), 'fascia');
@@ -590,6 +629,8 @@ function syncMuros() {
 }
 // Después de mover/girar a mano: el piso arrastra a sus murallas; una muralla movida a mano deja de seguir al piso
 function afterTransform(o) {
+  if (o.tipo === 'techo') syncAltura(o);
+  else if (['columna', 'panelTV', 'celosia', 'ventilador'].includes(o.tipo)) syncObjAltura(o);
   if (o.tipo === 'piso') syncMuros();
   else if (o.tipo === 'muro' && params(o).ajustarPiso) {
     o.params.ajustarPiso = false; refreshParamInputs(o);
@@ -786,6 +827,10 @@ const TYPES = {
     P('altura', 'Altura libre (piso → cielorraso)', 1.8, 6, 0.05, 2.75),
     P('espesor', 'Espesor del techo (alto de fascia)', 0.1, 1.2, 0.01, 0.45),
     P('fascia', 'Espesor de la fascia', 0.02, 0.4, 0.01, 0.08),
+    Bo('espesorAuto', 'Alto del techo según la estructura', true),
+    H('Inclinación'),
+    P('pendiente', 'Pendiente', 0, 25, 0.5, 8, '%'),
+    S('ladoBajo', 'Lado bajo (desagüe)', [['fondo', 'Fondo (−Z, muralla)'], ['frente', 'Frente (+Z)'], ['izq', 'Izquierda (−X)'], ['der', 'Derecha (+X)']], 'fondo'),
     H('Banda abierta con listones'),
     S('bandaLado', 'Lado', [['frente', 'Frente (+Z)'], ['fondo', 'Fondo (−Z)'], ['izq', 'Izquierda (−X)'], ['der', 'Derecha (+X)']], 'frente'),
     P('banda', 'Ancho de la banda (0 = sin banda)', 0, 4, 0.05, 0.9),
@@ -1052,25 +1097,40 @@ function buildObject(o) {
 let viewMode = 'terminado', estDirty = true;
 const EST_TIPOS = new Set(['techo', 'columna', 'pileta', 'muro', 'piso']);
 const FANTASMA_TIPOS = new Set(['sofa', 'mesaRatona', 'banqueta', 'reposera', 'isla', 'ventilador', 'maceta', 'panelTV', 'celosia', 'caja', 'piso', 'muro']);
+// Capa a la que pertenece cada pieza del diseño (para la vista "Capas")
+function capaObj(o, m) {
+  const parte = m.userData.parte;
+  if (o.tipo === 'techo') return parte === 'cubierta' ? 'cubierta' : parte === 'listones' ? 'banda' : parte === 'cielorraso' ? 'cielorraso' : 'fascia';
+  if (o.tipo === 'columna') return parte === 'poste' ? 'poste' : 'fascia';
+  return 'resto';
+}
+// 'normal' | 'oculto' | 'fantasma' | 'capa' (color plano de su capa)
 function modoMesh(o, m) {
   if (viewMode === 'terminado') return 'normal';
-  const parte = m.userData.parte;
-  if (o.tipo === 'techo') return parte === 'cielorraso' ? 'oculto' : viewMode === 'estructura' && parte ? 'fantasma' : 'normal';
-  if (viewMode !== 'estructura') return 'normal';
-  if (o.tipo === 'columna') return parte === 'poste' ? 'oculto' : 'fantasma';
+  const capa = capaObj(o, m);
+  if (viewMode === 'sincielo') return capa === 'cielorraso' ? 'oculto' : 'normal';
+  if (viewMode === 'capas') {
+    if (capa === 'poste' || o.tipo === 'arbol' || !capaOn(capa)) return 'oculto';
+    return capa === 'resto' ? 'fantasma' : 'capa';
+  }
+  if (o.tipo === 'techo') return capa === 'cielorraso' ? 'oculto' : 'fantasma';
+  if (o.tipo === 'columna') return capa === 'poste' ? 'oculto' : 'fantasma';
   if (o.tipo === 'arbol') return 'oculto';
   return FANTASMA_TIPOS.has(o.tipo) ? 'fantasma' : 'normal';
 }
 function applyModoObj(o) {
   const g = groups.get(o.id); if (!g) return;
+  const ex = viewMode === 'capas' && o.tipo === 'techo' ? explodeVal() : 0;
   g.traverse(m => {
     if (!m.isMesh) return;
     if (!m.userData.matOrig) m.userData.matOrig = m.material;
-    const k = modoMesh(o, m);
+    if (!m.userData.basePos) m.userData.basePos = m.position.clone();
+    const k = modoMesh(o, m), capa = capaObj(o, m);
     m.visible = k !== 'oculto';
-    m.material = k === 'fantasma' ? M.ghost : m.userData.matOrig;
+    m.material = k === 'fantasma' ? M.ghost : k === 'capa' ? CAPA_MAT[capa] : m.userData.matOrig;
     m.userData.ghost = k === 'fantasma';
-    m.castShadow = k === 'normal' && !m.userData.noShadow;
+    m.castShadow = (k === 'normal' || (k === 'capa' && capa !== 'fascia')) && !m.userData.noShadow;
+    m.position.copy(m.userData.basePos); if (ex) m.position.y += (CAPA_OFF[capa] || 0) * ex;
   });
 }
 let showTrees = true;
@@ -1100,6 +1160,7 @@ function persist() {
 function loadState(s) {
   state = migrate(s);
   applyMaterials(); rebuildAll();
+  { const te = state.objetos.find(o => o.tipo === 'techo' && o.visible !== false); if (te) syncAltura(te); }
   if (selected && !objById(selected)) selected = null;
   select(selected, true); renderOutliner(); renderMats(); renderEstInputs();
   $('#units').value = state.export.units || 'm'; $('#expQue').value = state.export.que || 'todo';
@@ -1109,19 +1170,21 @@ function redo() { if (!redoStack.length) return; undoStack.push(lastSnap); lastS
 function updateUndoButtons() { $('#bUndo').disabled = !undoStack.length; $('#bRedo').disabled = !redoStack.length; }
 
 /* Cambios de parámetros con efectos encadenados */
-function syncAltura(techo) {
-  const p = params(techo), top = r4(techo.pos[1] + p.altura);
-  for (const o of state.objetos) {
-    if (o === techo || !params(o).sincro) continue;
-    if (o.tipo === 'columna' || o.tipo === 'panelTV' || o.tipo === 'celosia') { o.params.alto = p.altura; buildObject(o); }
-    if (o.tipo === 'ventilador') { o.pos[1] = top; groups.get(o.id).position.y = top; }
+// Columnas, paneles y ventiladores "sincronizados" llegan justo al cielorraso inclinado sobre su posición
+function syncObjAltura(o, techo = state.objetos.find(t => t.tipo === 'techo' && t.visible !== false)) {
+  if (!techo || o === techo || !params(o).sincro) return;
+  const y = r4(alturaCieloEn(techo, o.pos[0], o.pos[2]));
+  if (o.tipo === 'columna' || o.tipo === 'panelTV' || o.tipo === 'celosia') {
+    const alto = r4(y - o.pos[1]); if (Math.abs((params(o).alto || 0) - alto) > 0.002) { o.params.alto = alto; buildObject(o); }
   }
+  if (o.tipo === 'ventilador') { o.pos[1] = y; groups.get(o.id).position.y = y; }
 }
+function syncAltura(techo) { for (const o of state.objetos) syncObjAltura(o, techo); }
 function setParam(o, k, v) {
   o.params[k] = v;
   if (o.tipo === 'muro' && k === 'largo' && params(o).ajustarPiso) afterTransform(o);
   buildObject(o);
-  if (o.tipo === 'techo' && k === 'altura') syncAltura(o);
+  if (o.tipo === 'techo') syncAltura(o); else if (k === 'sincro' && v) syncObjAltura(o);
   if (o.tipo === 'piso' || (o.tipo === 'muro' && ['espesor', 'ladoPiso', 'ajustarPiso'].includes(k))) syncMuros();
   updateDims(); updateSizeLabel();
 }
@@ -1256,7 +1319,7 @@ function updateDims() {
   for (const o of state.objetos) {
     if (o.tipo !== 'techo' || o.visible === false) continue;
     const g = groups.get(o.id); g.updateMatrixWorld(true);
-    const p = params(o), L = p.largo, W = p.ancho, h = p.altura, e = p.espesor, off = 0.6, y = 0.03;
+    const p = params(o), L = p.largo, W = p.ancho, h = p.altura, e = espesorEf(o), off = 0.6, y = 0.03;
     const w = (x, yy, z) => g.localToWorld(new THREE.Vector3(x, yy, z));
     const tick = 0.12;
     dimLines([
@@ -1264,15 +1327,26 @@ function updateDims() {
       w(-L / 2, y, W / 2 + off), w(L / 2, y, W / 2 + off),
       w(L / 2, y, -W / 2), w(L / 2 + off + tick, y, -W / 2), w(L / 2, y, W / 2), w(L / 2 + off + tick, y, W / 2),
       w(L / 2 + off, y, -W / 2), w(L / 2 + off, y, W / 2),
-      w(L / 2 + off, 0, W / 2 + off), w(L / 2 + off, h, W / 2 + off),
-      w(L / 2 + off - tick, h, W / 2 + off), w(L / 2 + off + tick, h, W / 2 + off),
-      w(L / 2 + off + 0.4, 0, W / 2 + off), w(L / 2 + off + 0.4, h + e, W / 2 + off),
-      w(L / 2 + off + 0.4 - tick, h + e, W / 2 + off), w(L / 2 + off + 0.4 + tick, h + e, W / 2 + off),
     ]);
     dimLabel(`largo ${fmtM(L)}`, w(0, y, W / 2 + off));
     dimLabel(`ancho ${fmtM(W)}`, w(L / 2 + off, y, 0));
-    dimLabel(`libre ${fmtM(h)}`, w(L / 2 + off, h / 2, W / 2 + off));
-    dimLabel(`total ${fmtM(h + e)}`, w(L / 2 + off + 0.4, (h + e) * 0.75, W / 2 + off));
+    // alturas en el lado bajo y en el lado alto (el techo está inclinado)
+    const pend = (p.pendiente || 0) / 100, D = p.ladoBajo === 'izq' || p.ladoBajo === 'der' ? L : W, hAlto = h + D * pend;
+    const esq = { fondo: [[L / 2 + off, -W / 2 - off], [L / 2 + off, W / 2 + off]], frente: [[L / 2 + off, W / 2 + off], [L / 2 + off, -W / 2 - off]],
+      izq: [[-L / 2 - off, W / 2 + off], [L / 2 + off, W / 2 + off]], der: [[L / 2 + off, W / 2 + off], [-L / 2 - off, W / 2 + off]] }[p.ladoBajo] || [[L / 2 + off, -W / 2 - off], [L / 2 + off, W / 2 + off]];
+    const vert = ([x, z], y1, txt, dx = 0) => {
+      dimLines([w(x + dx, 0, z), w(x + dx, y1, z), w(x + dx - tick, y1, z), w(x + dx + tick, y1, z)]);
+      dimLabel(txt, w(x + dx, y1 * 0.55, z));
+    };
+    if (pend > 0) {
+      vert(esq[0], h, `libre lado bajo ${fmtM(h)}`);
+      vert(esq[1], hAlto, `libre lado alto ${fmtM(hAlto)}`);
+      vert(esq[1], hAlto + e, `total ${fmtM(hAlto + e)}`, 0.4);
+      dimLabel(`pendiente ${p.pendiente} %`, w((esq[0][0] + esq[1][0]) / 2, (h + hAlto) / 2 + e, (esq[0][1] + esq[1][1]) / 2));
+    } else {
+      vert(esq[1], h, `libre ${fmtM(h)}`);
+      vert(esq[1], h + e, `total ${fmtM(h + e)}`, 0.4);
+    }
   }
 }
 
@@ -1858,9 +1932,28 @@ function vigaFE(L, apoyos, wfun, puntuales, EI) {
 }
 
 
-// ---------- Diseño completo ----------
-const EST_DEF = { viento: 45, exposicion: 'B', cubierta: 'sandwich', cielorraso: 'aluminio', sigmaAdm: 100, profFund: 1.2, sepVT: 2.5, pendiente: 2.5, profPileta: 1.5 };
+// ---------- Diseño completo: armado apilado (vigas principales → transversales → correas C), techo inclinado ----------
+const EST_DEF = { viento: 45, exposicion: 'B', cubierta: 'sandwich', cielorraso: 'aluminio', sigmaAdm: 100, profFund: 1.2, sepVT: 2.5, profPileta: 1.5, lluvia: 200 };
 const fmt1 = v => (Math.round(v * 10) / 10).toFixed(1), fmt2 = v => (Math.round(v * 100) / 100).toFixed(2);
+// Perfil C galvanizado con labios (mm), propiedades por líneas medias
+function secC(h, b, c, t) {
+  const hm = h - t, bm = b - t, cm = c - t / 2, Fy = 250;
+  const A = t * (hm + 2 * bm + 2 * cm);
+  const I = t * hm ** 3 / 12 + 2 * bm * t * (hm / 2) ** 2 + 2 * (t * cm ** 3 / 12 + cm * t * (hm / 2 - cm / 2) ** 2);
+  const S = I / (h / 2);
+  return { nombre: `C ${h}×${b}×${c}×${t}`, h: h / 1000, b: b / 1000, t, A, I, S, kgm: A * 0.00785, phiMn: 0.9 * Fy * S / 1e6, phiMnUp: 0.9 * 0.6 * Fy * S / 1e6, phiVn: 0.9 * 0.6 * Fy * hm * t / 1000, EI: EST_E * I * 1e-9 };
+}
+const CAT_C = [[80, 40, 15, 2], [100, 50, 15, 2], [120, 50, 15, 2], [140, 60, 20, 2], [160, 60, 20, 2.5], [200, 70, 20, 2.5]].map(a => secC(...a)).sort((a, b) => a.kgm - b.kgm);
+// Canaleta oculta: caudal de lluvia, sección (Manning, chapa n = 0,011, caída 0,5 %) y bocas de bajada Ø100
+function disenarCanaleta(area, lluvia, depthMax) {
+  const Q = lluvia * area / 3600;                       // L/s
+  const cap = (b, d) => { const y = Math.max(0.02, d - 0.03), A = b * y, Rh = A / (b + 2 * y); return 1000 * A * Rh ** (2 / 3) * Math.sqrt(0.005) / 0.011; };
+  const d = Math.max(0.08, Math.min(0.15, depthMax));
+  const b = [0.15, 0.2, 0.25, 0.3].find(b => cap(b, d) >= 2 * Q) || 0.3;
+  const Qboca = 1000 * 0.6 * Math.PI * 0.05 ** 2 * Math.sqrt(2 * 9.81 * 0.03);  // boca Ø100 con 3 cm de agua
+  const nBaj = Math.max(2, Math.ceil(1.5 * Q / Qboca));
+  return { Q, b, d, cap: cap(b, d), nBaj, Qboca, capBaj: nBaj * Qboca };
+}
 function clusters(vals, gap) {
   const idx = vals.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]), out = []; let cur = [];
   for (const [v, i] of idx) { if (cur.length && v - vals[cur[cur.length - 1]] > gap) { out.push(cur); cur = []; } cur.push(i); }
@@ -1879,6 +1972,7 @@ function distPoly(px, pz, poly) { // distancia punto–polígono (0 si está ade
 
 function disenarEstructura(inp) {
   const cfg = { ...EST_DEF, ...(inp.cfg || {}) }, R = inp.roof, avisos = [];
+  const lowSide = R.lowSide || 'fondo', p = (R.p || 0);
   // --- cargas (kN/m²) ---
   const qh = 0.613 * (cfg.exposicion === 'B' ? 0.70 : 0.85) * 0.85 * cfg.viento ** 2 / 1000;
   const Dc = (cfg.cubierta === 'chapa' ? 0.06 : 0.12) + (cfg.cielorraso === 'wpc' ? 0.12 : 0.06) + 0.05 + 0.08;
@@ -1900,7 +1994,9 @@ function disenarEstructura(inp) {
     avisos.push('Las columnas no forman dos líneas con al menos 2 columnas cada una. Alineálas en 2 filas (frente y fondo) para poder calcular la estructura.');
     return { ok: false, avisos, cargas, cfg };
   }
-  const res = opciones.sort((a, b) => a.kgAcero - b.kgAcero)[0];
+  // las correas tienen que quedar perpendiculares a la pendiente: se prefiere esa orientación y, entre iguales, la más liviana
+  opciones.sort((a, b) => (b.correasOk - a.correasOk) || (a.kgAcero - b.kgAcero));
+  const res = opciones[0];
   res.avisos = [...avisos, ...res.avisos]; res.cargas = cargas; res.cfg = cfg;
   return res;
 
@@ -1911,12 +2007,12 @@ function disenarEstructura(inp) {
     const I = rUV({ x0: -R.L / 2 + R.t, x1: R.L / 2 - R.t, z0: -R.W / 2 + R.t, z1: R.W / 2 - R.t }), C = rUV(R.C), B = rUV(R.band);
     const inR = (r, u, v) => r && u >= r.u0 - 1e-6 && u <= r.u1 + 1e-6 && v >= r.v0 - 1e-6 && v <= r.v1 + 1e-6;
     const qAt = (u, v, cs) => inR(C, u, v) ? cs.qc : inR(B, u, v) ? cs.qb : 0;
-    // pendiente hacia el lado opuesto a la banda
-    const lowSide = { frente: 'fondo', fondo: 'frente', izq: 'der', der: 'izq' }[R.band ? R.bandSide : 'frente'] || 'fondo';
-    const Ix = { x0: -R.L / 2 + R.t, x1: R.L / 2 - R.t, z0: -R.W / 2 + R.t, z1: R.W / 2 - R.t }, s = cfg.pendiente / 100;
-    const yMax = R.h + R.e - 0.035, yMin = R.h + 0.045;
-    const yTopXZ = (x, z) => yMax - s * ({ fondo: Ix.z1 - z, frente: z - Ix.z0, izq: Ix.x1 - x, der: x - Ix.x0 }[lowSide]);
-    const yTop = (u, v) => yTopXZ(...XZ(u, v));
+    // pendiente: lado bajo en el marco (u, v)
+    const lowAxis = (lowSide === 'fondo' || lowSide === 'frente') ? 'z' : 'x', lowMin = lowSide === 'fondo' || lowSide === 'izq';
+    const lowIsV = (lowAxis === 'z') === (dir === 'x');
+    const correasOk = lowIsV ? 1 : 0;
+    if (!lowIsV) av.push('Con esta posición de columnas, las correas quedan paralelas a la pendiente. Conviene que las filas de columnas sean paralelas al lado bajo.');
+    const rise = (x, z) => p * ({ fondo: z + R.W / 2, frente: R.W / 2 - z, izq: x + R.L / 2, der: R.L / 2 - x }[lowSide]);
     // --- líneas de columnas ---
     const cols = inp.cols.map(c => { const [u, v] = UV(c.x, c.z); return { ...c, u, v }; });
     const lines = lineasIdx.map(ix => {
@@ -1924,10 +2020,10 @@ function disenarEstructura(inp) {
       for (const c of cs) if (Math.abs(c.v - v) > 0.03) av.push(`${c.nombre} está ${Math.round(Math.abs(c.v - v) * 100)} cm fuera de la línea de la viga: alineala con las otras columnas de esa fila.`);
       return { v, cols: cs };
     }).sort((a, b) => a.v - b.v);
-    lines.forEach((l, i) => { l.nombre = `VP-${i + 1}`; l.desc = lines.length === 2 ? (i === 0 ? 'fondo' : 'frente') : `fila ${i + 1}`; });
-    if (dir === 'z') lines.forEach((l, i) => { l.desc = lines.length === 2 ? (i === 0 ? 'izquierda' : 'derecha') : `fila ${i + 1}`; });
+    const lado2 = dir === 'x' ? ['fondo', 'frente'] : ['izquierda', 'derecha'];
+    lines.forEach((l, i) => { l.nombre = `VP-${i + 1}`; l.desc = lines.length === 2 ? lado2[i] : `fila ${i + 1}`; });
     for (const l of lines) if (l.v < I.v0 || l.v > I.v1) av.push(`La fila ${l.nombre} queda fuera del techo: las vigas no pueden apoyarse ahí.`);
-    // --- vigas transversales (VT) ---
+    // --- vigas transversales (VT), apoyadas sobre las principales ---
     let us = [I.u0 + 0.025, I.u1 - 0.025];
     for (const c of cols) if (c.u > I.u0 + 0.25 && c.u < I.u1 - 0.25 && !us.some(u => Math.abs(u - c.u) < 0.2)) us.push(c.u);
     us.sort((a, b) => a - b);
@@ -1945,12 +2041,12 @@ function disenarEstructura(inp) {
         const wf = xi => qAt(t.us, I.v0 + xi, cs) * t.trib + (t.extremo ? cs.g * FASC : 0);
         const P = [{ x: 0, P: cs.g * FASC * t.trib }, { x: Lvt, P: cs.g * FASC * t.trib }];
         out[k] = vigaFE(Lvt, apVT, wf, P, EIref);
-        out[k + '1'] = vigaFE(Lvt, apVT, () => 1, P.map(p => ({ x: p.x, P: 0 })), EIref);
+        out[k + '1'] = vigaFE(Lvt, apVT, () => 1, P.map(q => ({ x: q.x, P: 0 })), EIref);
       }
       return out;
     });
     const gF = { U: 1.2, UP: 0.9, S: 1, SUP: 1 };
-    const evalViga = (fe, sec, sw) => { // sw: peso propio kN/m
+    const evalViga = (fe, sec, sw) => {
       let Mu = 0, Vu = 0;
       for (const k of ['U', 'UP']) {
         const a = fe[k], b = fe[k + '1'], g = gF[k];
@@ -1969,16 +2065,13 @@ function disenarEstructura(inp) {
       for (const sec of cat) { if (!filtro(sec)) continue; const e = evalFn(sec); if (pasa(e)) return { sec, e, ok: true }; if (!mejor || e.util < mejor.e.util) mejor = { sec, e, ok: false }; }
       return mejor;
     };
-    const depthVT = Math.min(...vts.map(t => Math.min(yTop(t.u, I.v0), yTop(t.u, I.v1)))) - yMin;
-    let selVT = elegir(CAT_VIGAS, sec => sec.t >= 2 && sec.h <= depthVT + 1e-6, sec => {
+    const selVT = elegir(CAT_VIGAS, sec => sec.t >= 2 && sec.h <= 0.2 + 1e-6, sec => {
       const sw = sec.kgm * 0.00981; let peor = null;
       for (const fe of vtFE) { const e = evalViga(fe, sec, sw); if (!peor || (pasa(peor) && !pasa(e)) || (pasa(peor) === pasa(e) && e.util > peor.util)) peor = e; }
       return peor;
     });
-    if (!selVT) selVT = { sec: CAT_VIGAS[CAT_VIGAS.length - 1], e: { Mu: 0, util: 9, utilV: 9, okF: false, tr: [], vo: [] }, ok: false };
-    if (!selVT.ok) av.push(`No encontré un perfil para las vigas transversales que verifique dentro del espesor del techo (${Math.round(depthVT * 1000)} mm libres). Aumentá la altura de la fascia o agregá columnas.`);
+    if (!selVT.ok) av.push('Las vigas transversales no verifican con ningún tubo de hasta 200 mm: agregá columnas o achicá el voladizo.');
     const VT = selVT.sec, swVT = VT.kgm * 0.00981;
-    // reacciones de cada VT sobre cada línea (hacia abajo sobre la VP)
     const reac = vtFE.map(fe => { const o = {}; for (const k of Object.keys(casos)) o[k] = fe[k].R.map((r, j) => r + gF[k] * swVT * fe[k + '1'].R[j]); return o; });
     // --- vigas principales (VP) ---
     const Lvp = I.u1 - I.u0;
@@ -1988,58 +2081,67 @@ function disenarEstructura(inp) {
       for (const k of Object.keys(casos)) {
         const P = vts.map((t, i) => ({ x: t.u - I.u0, P: reac[i][k][j] }));
         fe[k] = vigaFE(Lvp, ap, () => 0, P, EIref);
-        fe[k + '1'] = vigaFE(Lvp, ap, () => 1, P.map(p => ({ x: p.x, P: 0 })), EIref);
+        fe[k + '1'] = vigaFE(Lvp, ap, () => 1, P.map(q => ({ x: q.x, P: 0 })), EIref);
       }
-      const depth = Math.min(yTop(I.u0, l.v), yTop(I.u1, l.v)) - yMin;
-      const base = sec => sec.t >= 3.2 && sec.b >= 0.1 - 1e-6 && sec.h >= VT.h - 1e-6;
-      let sel = elegir(CAT_VIGAS, sec => base(sec) && sec.h <= depth + 1e-6, sec => evalViga(fe, sec, sec.kgm * 0.00981));
-      if (!sel || !sel.ok) {
-        const sinLimite = elegir(CAT_VIGAS, base, sec => evalViga(fe, sec, sec.kgm * 0.00981));
-        av.push(`${l.nombre} (${l.desc}): ${sinLimite && sinLimite.ok ? `necesita un tubo ${sinLimite.sec.nombre}, que no entra en el espesor del techo (${Math.round(depth * 1000)} mm libres)` : 'ningún tubo del catálogo verifica'}. Agregá columnas en esa fila o subí la fascia.`);
-        sel = sinLimite || sel;
-      }
-      return { ...l, sel, sec: sel.sec, fe, depth, L: Lvp, ap };
+      const sel = elegir(CAT_VIGAS, sec => sec.t >= 3.2 && sec.b >= 0.1 - 1e-6, sec => evalViga(fe, sec, sec.kgm * 0.00981));
+      if (!sel.ok) av.push(`${l.nombre} (${l.desc}): ningún tubo del catálogo verifica. Agregá columnas en esa fila.`);
+      return { ...l, sel, sec: sel.sec, fe, L: Lvp, ap };
     });
-    // misma sección en todas las vigas principales si la mayor verifica en todas (compra y armado más simples)
     const mayor = vps.reduce((m, vp) => vp.sec.kgm > m.sec.kgm ? vp : m, vps[0]).sec;
     if (vps.some(vp => vp.sec !== mayor)) {
       const ev = vps.map(vp => evalViga(vp.fe, mayor, mayor.kgm * 0.00981));
-      if (ev.every(pasa) && vps.every(vp => mayor.h <= vp.depth + 1e-6)) vps.forEach((vp, j) => { vp.sec = mayor; vp.sel = { sec: mayor, e: ev[j], ok: true }; });
+      if (ev.every(pasa) && vps.every(vp => Math.abs(vp.sec.h - mayor.h) < 0.06)) vps.forEach((vp, j) => { vp.sec = mayor; vp.sel = { sec: mayor, e: ev[j], ok: true }; });
     }
+    const VPmax = vps.reduce((m, vp) => vp.sec.h > m.h ? vp.sec : m, vps[0].sec);
     for (const vp of vps) {
       const sw = vp.sec.kgm * 0.00981; vp.Rc = {};
       for (const k of Object.keys(casos)) vp.Rc[k] = vp.fe[k].R.map((r, i) => r + gF[k] * sw * vp.fe[k + '1'].R[i]);
     }
-    // --- correas (en el plano, entre VT) ---
-    let vSup = [...lines.map(l => l.v), I.v0 + 0.04, I.v1 - 0.04];
-    if (B && C) { if (B.v0 >= C.v1 - 1e-6) vSup.push(C.v1); else if (B.v1 <= C.v0 + 1e-6) vSup.push(C.v0); }
-    vSup = [...new Set(vSup.map(v => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
-    const extra = [];
-    for (let i = 0; i < vSup.length - 1; i++) {
-      const a = vSup[i], b = vSup[i + 1], enC = C && (a + b) / 2 > C.v0 && (a + b) / 2 < C.v1;
-      if (enC && b - a > 1.5) { const n = Math.ceil((b - a) / 1.5); for (let k = 1; k < n; k++) extra.push(a + (b - a) * k / n); }
-    }
-    vSup = [...vSup, ...extra].sort((a, b) => a - b);
-    const vCor = vSup.filter(v => !lines.some(l => Math.abs(l.v - v) < 0.08));
-    const bayMax = Math.max(...uVT.slice(1).map((u, i) => u - uVT[i]));
-    let tribMax = 0;
-    vCor.forEach(v => { const i = vSup.indexOf(v), a = i ? (v - vSup[i - 1]) / 2 : 0, b = i < vSup.length - 1 ? (vSup[i + 1] - v) / 2 : 0; tribMax = Math.max(tribMax, a + b); });
-    const selCor = elegir(CAT_CORREAS, sec => sec.t >= 2 && sec.h <= VT.h + 1e-6, sec => {
-      const sw = sec.kgm * 0.00981, wU = casos.U.qc * tribMax + 1.2 * (sw + FASC), wUP = Math.abs(casos.UP.qc * tribMax + 0.9 * sw), wS = casos.S.qc * tribMax + sw + FASC;
-      const Mu = Math.max(wU, wUP) * bayMax ** 2 / 8, v = 5 * wS * bayMax ** 4 / (384 * sec.EI);
-      return { Mu, util: Mu / sec.phiMn, utilV: Math.max(wU, wUP) * bayMax / 2 / sec.phiVn, okF: v <= bayMax / 300, tr: [{ L: bayMax, v }], vo: [] };
+    // --- canaleta oculta (sobre las puntas de las VT, del lado bajo) ---
+    const areaC = (C.u1 - C.u0) * (C.v1 - C.v0);
+    // --- correas C continuas sobre las VT ---
+    const vLowEdge = lowIsV ? (lowMin ? I.v0 : I.v1) : null;
+    const sentido = lowMin ? 1 : -1;
+    const lineasCorrea = gutB => {
+      let a = C.v0, b = C.v1;
+      if (lowIsV) { if (lowMin) a = Math.max(a, I.v0 + gutB + 0.05); else b = Math.min(b, I.v1 - gutB - 0.05); }
+      const n = Math.max(1, Math.ceil((b - a) / 1.5 - 1e-6)), out = [];
+      for (let k = 0; k <= n; k++) out.push(a + (b - a) * k / n);
+      if (!lowIsV || !lowMin) out.unshift(I.v0 + 0.04); if (!lowIsV || lowMin) out.push(I.v1 - 0.04); // bordes (fascia)
+      return [...new Set(out.map(v => Math.round(v * 1000) / 1000))].sort((x, y) => x - y);
+    };
+    const corFE = (vCor) => {
+      const Lc = I.u1 - I.u0, ap = uVT.map(u => Math.min(Lc, Math.max(0, u - I.u0)));
+      let tribMax = 0; vCor.forEach((v, i) => { const a = i ? (v - vCor[i - 1]) / 2 : 0, b = i < vCor.length - 1 ? (vCor[i + 1] - v) / 2 : 0; tribMax = Math.max(tribMax, a + b); });
+      const fe = {};
+      for (const [k, cs] of Object.entries(casos)) fe[k] = vigaFE(Lc, ap, () => cs.qc * tribMax + cs.g * FASC * 0.5, [], EIref), fe[k + '1'] = vigaFE(Lc, ap, () => 1, [], EIref);
+      return { fe, tribMax };
+    };
+    let gut = disenarCanaleta(areaC, cfg.lluvia, 0.12), vCor = lineasCorrea(gut.b), cf = corFE(vCor);
+    const selCor = elegir(CAT_C, sec => sec.t >= 2, sec => {
+      const sw = sec.kgm * 0.00981, e = evalViga(cf.fe, sec, sw);
+      let Mup = 0; const a = cf.fe.UP, b = cf.fe.UP1; for (let i = 0; i < a.M.length; i++) Mup = Math.max(Mup, Math.abs(a.M[i] + 0.9 * sw * b.M[i]));
+      return { ...e, util: Math.max(e.Mu / sec.phiMn, Mup / sec.phiMnUp) };
     });
     const COR = selCor.sec;
+    gut = disenarCanaleta(areaC, cfg.lluvia, COR.h + 0.03 - 0.01);
+    if (Math.abs(gut.b - (vCor.length ? gut.b : 0)) > 1e-6) vCor = lineasCorrea(gut.b);
+    // --- alturas (marco del techo antes de inclinar) y alto de la fascia ---
+    const yVPb = R.h + 0.045, yVTb = yVPb + VPmax.h, yCb = yVTb + VT.h, yPanel = yCb + COR.h;
+    const espesor = Math.ceil((yPanel + 0.03 + 0.015 - R.h) * 100 - 1e-9) / 100;
+    const eViento = R.eAuto ? espesor : R.e;
     // --- columnas, placas, fundaciones ---
-    const nCol = cols.length, F_f = (Lx, e) => qh * 0.85 * 1.5 * 1.5 * Lx * e;
+    const nCol = cols.length, sinT = p / Math.sqrt(1 + p * p);
     const colDesign = [];
     for (const vp of vps) vp.cols.forEach((c, i) => {
       const R_ = k => vp.Rc[k][i];
-      const yCap = yTop(c.u, vp.v) - vp.sec.h - 0.0127;
-      // viento perpendicular a cada lado del techo
+      const yCap = R.h + rise(c.x, c.z) + 0.045 - 0.0127;
+      // viento: fascia (+ componente horizontal de la presión sobre el techo inclinado) y columnas
       let Ms = 0, Vs = 0, Ftop = 0, Fcol = 0;
-      for (const [Llado, ancho] of [[R.L, c.ex], [R.W, c.ez]]) {
-        const ft = F_f(Llado, R.e) / nCol, fc = qh * 0.85 * 2.0 * ancho * c.alto, m = ft * (R.h + R.e / 2) + fc * c.alto / 2;
+      for (const [Llado, ancho, eje] of [[R.L, c.ex, 'z'], [R.W, c.ez, 'x']]) {
+        const extraIncl = eje === lowAxis ? W * R.L * R.W * sinT : 0;
+        const ft = (qh * 0.85 * 1.5 * 1.5 * Llado * eViento + extraIncl) / nCol, fc = qh * 0.85 * 2.0 * ancho * c.alto;
+        const m = ft * (yCap + eViento / 2) + fc * c.alto / 2;
         if (m > Ms) { Ms = m; Vs = ft + fc; Ftop = ft; Fcol = fc; }
       }
       const Mr = 1.6 * Ms;
@@ -2065,13 +2167,11 @@ function disenarEstructura(inp) {
       for (const b of CAT_COL_B) { minimo = probarCol(b); if (minimo) break; }
       if (!elegido) { av.push(`${c.nombre}: ningún tubo cuadrado del catálogo verifica.`); return; }
       if (agrandada) av.push(`${c.nombre}: el poste de ${Math.round(c.b * 100)} cm no alcanza; hace falta un tubo ${elegido.sec.nombre}.`);
-      // placa base y pernos
       const bp = Math.ceil((elegido.sec.b + 0.15) / 0.05 - 1e-9) * 0.05, tp = Mr > 20 ? 0.019 : elegido.sec.b >= 0.15 ? 0.016 : 0.0125;
       const Pup = R_('UP') + 0.9 * elegido.sw, lever = bp - 0.075;
       const Tb = Mr / (lever * 2) + Math.max(0, -Pup) / 4;
       const dB = [16, 20, 24].find(d => 0.5625 * 400 * Math.PI * d * d / 4 / 1000 >= Tb) || 24, hef = Math.max(0.30, 15 * dB / 1000);
       const a = Math.max(0.40, Math.ceil((bp + 0.10) / 0.05 - 1e-9) * 0.05);
-      // zapata aislada
       const Df = Math.max(cfg.profFund, 0.8), Mf = Ms + Vs * Df, NS = R_('S') + elegido.sw, NSUP = R_('SUP') + elegido.sw;
       let zap = null;
       for (let Bz = 0.8; Bz <= 3.0 + 1e-9; Bz += 0.1) {
@@ -2084,30 +2184,64 @@ function disenarEstructura(inp) {
         if (FSlev >= 1.5 && FSvuelco >= 1.5 && sA <= cfg.sigmaAdm && sB <= cfg.sigmaAdm) { zap = { B: Math.round(Bz * 100) / 100, H: Hz, Df, hp, a, Wf, FSlev, FSvuelco, sigma: Math.max(sA, sB), NS, NSUP, Mf }; break; }
       }
       if (!zap) { av.push(`${c.nombre}: no encontré zapata de hasta 3,0 m que verifique; revisá la tensión admisible del suelo.`); zap = { B: 3, H: 0.6, Df, hp: Math.max(0.1, Df - 0.725), a, FSlev: 0, FSvuelco: 0, sigma: 0, NS, NSUP, Mf }; }
-      // pileta y muralla cercanas
       for (const pl of inp.pools || []) {
         const libre = distPoly(c.x, c.z, pl.poly) - zap.B / Math.SQRT2;
         if (libre < 0.6) av.push(`${c.nombre}: la zapata queda a ${Math.max(0, libre).toFixed(2)} m de la ${pl.nombre}: riesgo de tocar el relleno, la pared o los caños. Alejá la columna o consultá a un ingeniero.`);
         else if (Df + libre < cfg.profPileta + 0.3) av.push(`${c.nombre}: la zapata (a ${libre.toFixed(2)} m de la ${pl.nombre}) carga la pared de la pileta. Fundar a ${fmt2(cfg.profPileta + 0.3 - libre)} m o más, o alejarla.`);
       }
-      for (const mu of inp.walls || []) {
-        if (distPoly(c.x, c.z, mu.poly) < zap.B / Math.SQRT2) av.push(`${c.nombre}: la zapata (${fmt2(zap.B)} m) se superpone con el cimiento de la ${mu.nombre}. Hacé una zapata combinada con el cimiento del muro, o una zapata excéntrica.`);
-      }
+      for (const mu of inp.walls || []) if (distPoly(c.x, c.z, mu.poly) < zap.B / Math.SQRT2) av.push(`${c.nombre}: la zapata (${fmt2(zap.B)} m) se superpone con el cimiento de la ${mu.nombre}. Hacé una zapata combinada con el cimiento del muro, o una zapata excéntrica.`);
       colDesign.push({ c, vp, ...elegido, Mr, Ms, Vs, Pup, bp, tp, dB, hef, zap, yCap, minimo: minimo && minimo.sec });
     });
-    // --- miembros para dibujar y computar ---
+    // --- miembros (enTecho: van en el plano inclinado del techo; el resto, a plomo) ---
     const P3 = (u, v, y) => { const [x, z] = XZ(u, v); return [x, y, z]; };
     const add = m => { miembros.push(m); return m; };
-    for (const vp of vps) add({ grupo: 'VP', nombre: `${vp.nombre} · viga principal (${vp.desc})`, seccion: `Tubo ${vp.sec.nombre}`, kgm: vp.sec.kgm, w: vp.sec.b, d: vp.sec.h, p0: P3(I.u0, vp.v, yTop(I.u0, vp.v)), p1: P3(I.u1, vp.v, yTop(I.u1, vp.v)), util: vp.sel.e.util });
-    vts.forEach((t, i) => add({ grupo: 'VT', nombre: `VT-${i + 1} · viga transversal`, seccion: `Tubo ${VT.nombre}`, kgm: VT.kgm, w: VT.b, d: VT.h, p0: P3(t.u, I.v0, yTop(t.u, I.v0)), p1: P3(t.u, I.v1, yTop(t.u, I.v1)), util: selVT.e.util }));
-    for (const v of vCor) for (let i = 0; i < uVT.length - 1; i++) {
-      const u0 = uVT[i] + VT.b / 2, u1 = uVT[i + 1] - VT.b / 2; if (u1 - u0 < 0.05) continue;
-      add({ grupo: 'CO', nombre: 'Correa', seccion: `Tubo ${COR.nombre}`, kgm: COR.kgm, w: COR.b, d: COR.h, p0: P3(u0, v, yTop(u0, v)), p1: P3(u1, v, yTop(u1, v)), util: selCor.e.util });
-    }
-    // arriostramiento en cruz (paños extremos, entre la primera y la última fila)
+    for (const vp of vps) add({ grupo: 'VP', enTecho: true, nombre: `${vp.nombre} · viga principal (${vp.desc})`, seccion: `Tubo ${vp.sec.nombre}`, kgm: vp.sec.kgm, w: vp.sec.b, d: vp.sec.h, p0: P3(I.u0, vp.v, yVPb + vp.sec.h), p1: P3(I.u1, vp.v, yVPb + vp.sec.h), util: vp.sel.e.util });
+    vts.forEach((t, i) => add({ grupo: 'VT', enTecho: true, nombre: `VT-${i + 1} · viga transversal (apoyada sobre las principales)`, seccion: `Tubo ${VT.nombre}`, kgm: VT.kgm, w: VT.b, d: VT.h, p0: P3(t.u, I.v0, yVTb + VT.h), p1: P3(t.u, I.v1, yVTb + VT.h), util: selVT.e.util }));
+    for (const v of vCor) add({ grupo: 'CO', enTecho: true, nombre: 'Correa (continua sobre las transversales)', seccion: COR.nombre + ' galvanizado', kgm: COR.kgm, w: COR.b, d: COR.h, p0: P3(I.u0, v, yPanel), p1: P3(I.u1, v, yPanel), util: selCor.e.util });
     const vA = lines[0].v, vB = lines[lines.length - 1].v, panos = uVT.length >= 3 ? [[0, 1], [uVT.length - 2, uVT.length - 1]] : [[0, 1]];
-    for (const [i, j] of panos) for (const [ua, ub] of [[uVT[i], uVT[j]], [uVT[j], uVT[i]]]) {
-      add({ grupo: 'AR', nombre: 'Arriostramiento en cruz', seccion: 'Redondo Ø12 + tensor', kgm: 0.888, r: 0.008, cyl: true, p0: P3(ua, vA, yTop(ua, vA) - 0.07), p1: P3(ub, vB, yTop(ub, vB) - 0.07) });
+    for (const [i, j] of panos) for (const [ua, ub] of [[uVT[i], uVT[j]], [uVT[j], uVT[i]]])
+      add({ grupo: 'AR', enTecho: true, nombre: 'Arriostramiento en cruz', seccion: 'Redondo Ø12 + tensor', kgm: 0.888, r: 0.008, cyl: true, p0: P3(ua, vA, yVTb + 0.03), p1: P3(ub, vB, yVTb + 0.03) });
+    // canaleta, gárgolas de rebalse y bajadas
+    let gutLinea = null;
+    if (lowIsV) {
+      const v = lowMin ? I.v0 + gut.b / 2 + 0.01 : I.v1 - gut.b / 2 - 0.01;
+      gutLinea = { tipo: 'v', v };
+      add({ grupo: 'CA', enTecho: true, nombre: 'Canaleta oculta (apoyada en las puntas de las transversales)', seccion: `Chapa galvanizada N°22, ${Math.round(gut.b * 1000)}×${Math.round(gut.d * 1000)} mm`, kgm: (gut.b + 2 * gut.d + 0.06) * 0.8 * 7.85, w: gut.b, d: gut.d, p0: P3(I.u0, v, yCb + gut.d), p1: P3(I.u1, v, yCb + gut.d) });
+      for (const u of [I.u0 - R.t / 2, I.u1 + R.t / 2]) add({ grupo: 'CA', enTecho: true, nombre: 'Gárgola de rebalse', seccion: 'Chapa galvanizada 50×80 mm', kg: 0.6, box: [...P3(u, v, yCb + gut.d - 0.03), 0.06, 0.05, 0.08] });
+    } else {
+      const u = lowMin ? I.u0 + gut.b / 2 + 0.01 : I.u1 - gut.b / 2 - 0.01;
+      gutLinea = { tipo: 'u', u };
+      add({ grupo: 'CA', enTecho: true, nombre: 'Canaleta oculta (apoyada sobre la transversal del borde)', seccion: `Chapa galvanizada N°22, ${Math.round(gut.b * 1000)}×${Math.round(gut.d * 1000)} mm`, kgm: (gut.b + 2 * gut.d + 0.06) * 0.8 * 7.85, w: gut.b, d: gut.d, p0: P3(u, I.v0, yCb + gut.d), p1: P3(u, I.v1, yCb + gut.d) });
+    }
+    // bajadas: a plomo desde la canaleta hasta el piso; si hay muralla debajo, van embutidas en ella
+    const salidas = [];
+    if (gutLinea.tipo === 'v') {
+      const lineaBaja = lowMin ? vps[0] : vps[vps.length - 1];
+      const us2 = lineaBaja.cols.map(c => c.u);
+      for (let k = 0; k < gut.nBaj; k++) salidas.push(us2.length >= gut.nBaj ? us2[Math.round(k * (us2.length - 1) / Math.max(1, gut.nBaj - 1))] : I.u0 + (I.u1 - I.u0) * (k + 0.5) / gut.nBaj);
+    } else for (let k = 0; k < gut.nBaj; k++) salidas.push(I.v0 + (I.v1 - I.v0) * (k + 0.5) / gut.nBaj);
+    let embutidas = false;
+    for (const s of salidas) {
+      const [x, , z] = gutLinea.tipo === 'v' ? P3(s, gutLinea.v, 0) : P3(gutLinea.u, s, 0);
+      const enMuro = (inp.walls || []).some(mu => distPoly(x, z, mu.poly) < 0.05);
+      embutidas = embutidas || enMuro;
+      add({ grupo: 'BA', nombre: enMuro ? 'Bajada pluvial embutida en la muralla' : 'Bajada pluvial', seccion: 'Caño PVC Ø110', kgm: 0, r: 0.055, cyl: true, p0: [x, 0.02, z], p1: [x, R.h + rise(x, z) + (yCb - R.h) - 0.01, z] });
+    }
+    // subestructura del cielorraso: portantes omega perpendiculares a las lamas + cuelgues a las transversales
+    const sepPort = 0.8, Cx = R.C;
+    if (R.cieloDir === 'z') {
+      const n = Math.max(1, Math.ceil((Cx.z1 - Cx.z0) / sepPort));
+      for (let k = 0; k <= n; k++) { const z = Cx.z0 + 0.1 + (Cx.z1 - Cx.z0 - 0.2) * k / n; add({ grupo: 'SC', enTecho: true, nombre: 'Portante del cielorraso', seccion: 'Perfil omega galvanizado 35 mm', kgm: 0.45, w: 0.035, d: 0.02, p0: [Cx.x0, R.h + 0.045, z], p1: [Cx.x1, R.h + 0.045, z] }); }
+    } else {
+      const n = Math.max(1, Math.ceil((Cx.x1 - Cx.x0) / sepPort));
+      for (let k = 0; k <= n; k++) { const x = Cx.x0 + 0.1 + (Cx.x1 - Cx.x0 - 0.2) * k / n; add({ grupo: 'SC', enTecho: true, nombre: 'Portante del cielorraso', seccion: 'Perfil omega galvanizado 35 mm', kgm: 0.45, w: 0.035, d: 0.02, p0: [x, R.h + 0.045, Cx.z0], p1: [x, R.h + 0.045, Cx.z1] }); }
+    }
+    // cuelgues: en cada cruce de un portante con una transversal (o, si son paralelas, se fijan directo a las principales)
+    const enX = R.cieloDir === 'z', vtPerp = enX === (dir === 'x');
+    for (const pt of miembros.filter(m => m.grupo === 'SC')) for (const s of (vtPerp ? vts.map(t => t.u) : lines.map(l => l.v))) {
+      const X = enX ? s : pt.p0[0], Z = enX ? pt.p0[2] : s, yTopC = vtPerp ? yVTb : yVPb;
+      if (X < Cx.x0 - 0.01 || X > Cx.x1 + 0.01 || Z < Cx.z0 - 0.01 || Z > Cx.z1 + 0.01 || yTopC - (R.h + 0.045) < 0.02) continue;
+      add({ grupo: 'SC', enTecho: true, nombre: 'Cuelgue del cielorraso', seccion: 'Varilla roscada Ø6 con regulador', kgm: 0.22, r: 0.004, cyl: true, p0: [X, R.h + 0.045, Z], p1: [X, yTopC, Z] });
     }
     for (const cd of colDesign) {
       const { c, sec } = cd, yb = -0.10 + cd.tp, bs = Math.round((sec.b + 0.05) * 1000);
@@ -2121,20 +2255,6 @@ function disenarEstructura(inp) {
       add({ grupo: 'FU', nombre: `${c.nombre} · pedestal`, seccion: `Pedestal ${Math.round(z.a * 100)}×${Math.round(z.a * 100)} cm`, vol: z.a * z.a * z.hp, soloEst: true, box: [c.x, -z.Df + z.H + z.hp / 2, c.z, z.a, z.hp, z.a] });
       add({ grupo: 'FU', nombre: `${c.nombre} · zapata`, seccion: `Zapata ${fmt2(z.B)}×${fmt2(z.B)}×${fmt2(z.H)} m`, vol: z.B * z.B * z.H, soloEst: true, box: [c.x, -z.Df + z.H / 2, c.z, z.B, z.H, z.B] });
     }
-    // canaleta y bajadas en el lado bajo
-    const lowUV = { fondo: ['z', 0], frente: ['z', 1], izq: ['x', 0], der: ['x', 1] }[lowSide];
-    const lowIsV = (lowUV[0] === 'z') === (dir === 'x');
-    const nBaj = Math.max(2, Math.ceil(((C.u1 - C.u0) * (C.v1 - C.v0)) / 40));
-    if (lowIsV) {
-      const v = lowUV[1] ? I.v1 - 0.09 : I.v0 + 0.09;
-      add({ grupo: 'CA', nombre: 'Canaleta oculta', seccion: 'Chapa galvanizada N°22, desarrollo 500 mm', kgm: 4.5, w: 0.15, d: 0.12, p0: P3(I.u0, v, yTop(I.u0, v) - 0.02), p1: P3(I.u1, v, yTop(I.u1, v) - 0.02) });
-      const lineaBaja = lowUV[1] ? vps[vps.length - 1] : vps[0];
-      lineaBaja.cols.slice(0, nBaj).forEach(c => { const vv = c.v + (lowUV[1] ? 1 : -1) * (c.b / 2 + 0.07); add({ grupo: 'BA', nombre: 'Bajada pluvial', seccion: 'Caño PVC Ø110', kgm: 0, r: 0.055, cyl: true, p0: P3(c.u, vv, 0.02), p1: P3(c.u, vv, yTop(c.u, v) - 0.14) }); });
-    } else {
-      const u = lowUV[1] ? I.u1 - 0.09 : I.u0 + 0.09;
-      add({ grupo: 'CA', nombre: 'Canaleta oculta', seccion: 'Chapa galvanizada N°22, desarrollo 500 mm', kgm: 4.5, w: 0.15, d: 0.12, p0: P3(u, I.v0, yTop(u, I.v0) - 0.02), p1: P3(u, I.v1, yTop(u, I.v1) - 0.02) });
-      vps.map(vp => lowUV[1] ? vp.cols[vp.cols.length - 1] : vp.cols[0]).slice(0, nBaj).forEach(c => { const uu = c.u + (lowUV[1] ? 1 : -1) * (c.b / 2 + 0.07); add({ grupo: 'BA', nombre: 'Bajada pluvial', seccion: 'Caño PVC Ø110', kgm: 0, r: 0.055, cyl: true, p0: P3(uu, c.v, 0.02), p1: P3(uu, c.v, yTop(u, c.v) - 0.14) }); });
-    }
     for (const m of miembros) {
       if (m.p0) m.L = Math.hypot(m.p1[0] - m.p0[0], m.p1[1] - m.p0[1], m.p1[2] - m.p0[2]);
       if (m.kg === undefined) m.kg = (m.kgm || 0) * (m.L || 0);
@@ -2146,21 +2266,44 @@ function disenarEstructura(inp) {
       const e = vp.sel.e, tr = e.tr.map(t => `tramo ${fmt2(t.L)} m: ${Math.round(t.v * 1000)} mm (L/${Math.round(t.L / Math.max(t.v, 1e-6))})`).join(' · '), vo = e.vo.map(t => `voladizo ${fmt2(t.L)} m: ${Math.round(t.v * 1000)} mm`).join(' · ');
       checks.push(`${mark(vp.sel.ok)} ${vp.nombre} (${vp.desc}), tubo ${vp.sec.nombre}: Mu ${fmt1(e.Mu)} kN·m, uso ${pct(e.util)} · flecha ${tr}${vo ? ' · ' + vo : ''}`);
     }
-    { const e = selVT.e; checks.push(`${mark(selVT.ok)} VT ×${vts.length}, tubo ${VT.nombre} (luz entre filas ${fmt2(lines[lines.length - 1].v - lines[0].v)} m, separación máx. ${fmt2(bayMax)} m): Mu ${fmt1(e.Mu)} kN·m, uso ${pct(e.util)}${e.tr.length ? ` · flecha ${Math.round(Math.max(...e.tr.map(t => t.v)) * 1000)} mm` : ''}`); }
-    checks.push(`${mark(selCor.ok)} Correas, tubo ${COR.nombre} (luz ${fmt2(bayMax)} m, ancho tributario ${fmt2(tribMax)} m): uso ${pct(selCor.e.util)}`);
+    const bayMax = Math.max(...uVT.slice(1).map((u, i) => u - uVT[i]));
+    { const e = selVT.e; checks.push(`${mark(selVT.ok)} VT ×${vts.length} apoyadas sobre las principales, tubo ${VT.nombre} (luz entre filas ${fmt2(lines[lines.length - 1].v - lines[0].v)} m, separación máx. ${fmt2(bayMax)} m): Mu ${fmt1(e.Mu)} kN·m, uso ${pct(e.util)}${e.tr.length ? ` · flecha ${Math.round(Math.max(...e.tr.map(t => t.v)) * 1000)} mm` : ''}`); }
+    checks.push(`${mark(selCor.ok)} Correas ${COR.nombre} ×${vCor.length} líneas continuas (vanos de hasta ${fmt2(bayMax)} m, ancho tributario ${fmt2(cf.tribMax)} m): uso ${pct(selCor.e.util)} con succión y ala inferior sin tensores`);
+    checks.push(`✓ Canaleta oculta ${Math.round(gut.b * 1000)}×${Math.round(gut.d * 1000)} mm: lluvia de ${cfg.lluvia} mm/h sobre ${fmt1(areaC)} m² → caudal ${fmt1(gut.Q)} L/s; capacidad ${fmt1(gut.cap)} L/s con 0,5 % de caída · ${gut.nBaj} bajadas Ø110 (${fmt1(gut.capBaj)} L/s)${embutidas ? ' embutidas en la muralla' : ''} · 2 gárgolas de rebalse`);
+    for (const cd of colDesign) checks.push(`${mark(cd.inter <= 0.85)} ${cd.c.nombre}, tubo ${cd.sec.nombre} (alto ${fmt2(cd.Hc)} m): Pu ${fmt1(cd.Pu)} kN, Mu base ${fmt1(cd.Mr)} kN·m, uso ${pct(cd.inter)} · desplazamiento por viento ${Math.round(cd.drift * 1000)} mm · placa ${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm con 4 pernos Ø${cd.dB} · zapata ${fmt2(cd.zap.B)}×${fmt2(cd.zap.B)}×${fmt2(cd.zap.H)} m a −${fmt2(cd.zap.Df)} m (σ ${Math.round(cd.zap.sigma)} kPa, FS vuelco ${fmt2(cd.zap.FSvuelco)}${cd.Pup < 0 ? `, succión ${fmt1(-cd.Pup)} kN` : ''})`);
     const colMin = colDesign.reduce((m, cd) => !cd.minimo ? m : !m || cd.minimo.kgm > m.kgm ? cd.minimo : m, null);
     if (colMin && colDesign.length && colMin.kgm < colDesign[0].sec.kgm - 0.5) av.push(`Las columnas son de ${colDesign[0].sec.nombre} porque el diseño usa postes de ${Math.round(colDesign[0].c.b * 100)} cm. Estructuralmente alcanzaría un tubo ${colMin.nombre} (${Math.round((colDesign[0].sec.kgm - colMin.kgm) * colDesign.reduce((a, cd) => a + cd.Hc, 0))} kg menos de acero) si aceptás postes más finos.`);
-    for (const cd of colDesign) checks.push(`${mark(cd.inter <= 0.85)} ${cd.c.nombre}, tubo ${cd.sec.nombre} (alto ${fmt2(cd.Hc)} m): Pu ${fmt1(cd.Pu)} kN, Mu base ${fmt1(cd.Mr)} kN·m, uso ${pct(cd.inter)} · desplazamiento por viento ${Math.round(cd.drift * 1000)} mm · placa ${Math.round(cd.bp * 1000)}×${Math.round(cd.tp * 1000)} mm con 4 pernos Ø${cd.dB} · zapata ${fmt2(cd.zap.B)}×${fmt2(cd.zap.B)}×${fmt2(cd.zap.H)} m a −${fmt2(cd.zap.Df)} m (σ ${Math.round(cd.zap.sigma)} kPa, FS vuelco ${fmt2(cd.zap.FSvuelco)}${cd.Pup < 0 ? `, succión ${fmt1(-cd.Pup)} kN` : ''})`);
-    return { ok: true, dir, lines: vps, vts, VT, COR, colDesign, miembros, kgAcero, checks, avisos: av, lowSide, area: R.L * R.W };
+    return { ok: true, dir, lines: vps, vts, VT, COR, gut, colDesign, miembros, kgAcero, checks, avisos: av, lowSide, area: R.L * R.W, espesor, embutidas, correasOk, alturas: { yVPb, yVTb, yCb, yPanel } };
   }
 }
 const estGroup = new THREE.Group(); estGroup.visible = false; scene.add(estGroup);
-const EST_COL = { VP: '#d9583e', VT: '#3b8fd8', CO: '#4fae5c', AR: '#e6b422', COL: '#7b8591', PL: '#a3acb5', PE: '#d4d9de', FU: '#aaa395', CA: '#c4ccd3', BA: '#f0f0f0' };
-const EST_NOM = { VP: 'Vigas principales', VT: 'Vigas transversales', CO: 'Correas', AR: 'Arriostramiento en cruz', COL: 'Columnas', PL: 'Placas y capiteles', PE: 'Pernos de anclaje', FU: 'Fundaciones (hormigón H-21)', CA: 'Canaleta', BA: 'Bajadas pluviales' };
-const EST_CAPA = { VP: 'EST-VIGAS-PRINCIPALES', VT: 'EST-VIGAS-TRANSVERSALES', CO: 'EST-CORREAS', AR: 'EST-ARRIOSTRAMIENTO', COL: 'EST-COLUMNAS', PL: 'EST-PLACAS', PE: 'EST-PERNOS', FU: 'FUNDACIONES', CA: 'EST-CANALETA', BA: 'EST-BAJADAS' };
+// Capas: un color por cada parte de la obra (vista "Capas") y desplazamiento al separarlas
+const CAPAS = [
+  { k: 'cubierta', n: 'Cubierta (panel sándwich)', c: '#9db4c9' },
+  { k: 'canaleta', n: 'Canaleta oculta y bajadas', c: '#25b3c7' },
+  { k: 'correas', n: 'Correas C', c: '#4fae5c' },
+  { k: 'vt', n: 'Vigas transversales', c: '#3b8fd8' },
+  { k: 'vp', n: 'Vigas principales', c: '#d9583e' },
+  { k: 'columnas', n: 'Columnas', c: '#6b7480' },
+  { k: 'fascia', n: 'Fascia y revestimientos', c: '#8e7cc3' },
+  { k: 'banda', n: 'Banda de lamas', c: '#c8894f' },
+  { k: 'subcielo', n: 'Estructura del cielorraso', c: '#e6b422' },
+  { k: 'cielorraso', n: 'Cielorraso (lamas)', c: '#e8a671' },
+  { k: 'bases', n: 'Placas, pernos y fundaciones', c: '#aaa395' },
+  { k: 'resto', n: 'Muebles, muros y resto', c: '#b4bec8' },
+];
+const CAPA_OFF = { cubierta: 4, canaleta: 3, correas: 3, vt: 2, banda: 2, vp: 1, subcielo: -1, cielorraso: -2 };
+const CAPA_MAT = Object.fromEntries(CAPAS.map(({ k, c }) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: k === 'bases' ? 0.95 : 0.55, metalness: ['vp', 'vt', 'correas', 'columnas', 'canaleta'].includes(k) ? 0.3 : 0, ...(k === 'fascia' ? { transparent: true, opacity: 0.3, depthWrite: false } : {}) })]));
+const GRUPO_CAPA = { VP: 'vp', VT: 'vt', CO: 'correas', AR: 'vt', COL: 'columnas', PL: 'bases', PE: 'bases', FU: 'bases', CA: 'canaleta', BA: 'canaleta', SC: 'subcielo' };
+const EST_COL = Object.fromEntries(Object.entries(GRUPO_CAPA).map(([g, k]) => [g, CAPAS.find(c => c.k === k).c]));
+EST_COL.AR = '#e6b422'; EST_COL.PE = '#d4d9de'; EST_COL.SC = '#e6b422';
+const EST_NOM = { VP: 'Vigas principales', VT: 'Vigas transversales', CO: 'Correas', AR: 'Arriostramiento en cruz', COL: 'Columnas', PL: 'Placas y capiteles', PE: 'Pernos de anclaje', FU: 'Fundaciones (hormigón H-21)', CA: 'Canaleta y rebalses', BA: 'Bajadas pluviales', SC: 'Estructura del cielorraso' };
+const EST_CAPA = { VP: 'EST-VIGAS-PRINCIPALES', VT: 'EST-VIGAS-TRANSVERSALES', CO: 'EST-CORREAS', AR: 'EST-ARRIOSTRAMIENTO', COL: 'EST-COLUMNAS', PL: 'EST-PLACAS', PE: 'EST-PERNOS', FU: 'FUNDACIONES', CA: 'EST-CANALETA', BA: 'EST-BAJADAS', SC: 'CIELORRASO-ESTRUCTURA' };
 const EST_MAT = Object.fromEntries(Object.entries(EST_COL).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: k === 'FU' ? 0.95 : 0.5, metalness: k === 'FU' || k === 'BA' ? 0 : 0.35 })]));
 const LADO_TXT = { fondo: 'el fondo', frente: 'el frente', izq: 'la izquierda', der: 'la derecha' };
 let estRes = null, estTecho = null, estLast = 0;
+const capaOn = k => !(ui.capas && ui.capas[k] === false);
+const explodeVal = () => (ui.explode ?? 0.35) * 0.6;
 
 function cfgEst() { return { ...EST_DEF, ...(state.estructura || {}) }; }
 // Pasa el diseño (coordenadas del mundo) a coordenadas locales del techo para el motor de cálculo
@@ -2181,7 +2324,8 @@ function estEntrada() {
   }).filter(c => Math.abs(c.x) <= p.largo / 2 + 0.3 && Math.abs(c.z) <= p.ancho / 2 + 0.3);
   const pools = state.objetos.filter(o => o.tipo === 'pileta' && o.visible !== false).map(o => { const q = params(o); return { nombre: o.nombre, poly: rectLoc(o, q.largo, q.ancho) }; });
   const walls = state.objetos.filter(o => o.tipo === 'muro' && o.visible !== false).map(o => { const q = params(o); return { nombre: o.nombre, poly: rectLoc(o, q.largo, q.espesor, 0.15) }; });
-  return { techo, inp: { roof: { L: p.largo, W: p.ancho, h: p.altura, e: p.espesor, t: Z.t, C: Z.C, band: Z.band, bandSide: Z.lado }, cols, pools, walls, cfg: cfgEst() } };
+  const roof = { L: p.largo, W: p.ancho, h: p.altura, e: espesorEf(techo), t: Z.t, C: Z.C, band: Z.band, bandSide: Z.lado, p: (p.pendiente || 0) / 100, lowSide: p.ladoBajo, eAuto: !!p.espesorAuto, cieloDir: p.cieloDir };
+  return { techo, inp: { roof, cols, pools, walls, cfg: cfgEst() } };
 }
 function recalcularEstructura() {
   const e = estEntrada();
@@ -2189,14 +2333,20 @@ function recalcularEstructura() {
   if (e) {
     estTecho = e.techo;
     try { res = disenarEstructura(e.inp); } catch (err) { console.error(err); res = { ok: false, avisos: ['No se pudo calcular la estructura: ' + err.message] }; }
+    // el alto del techo (fascia) acompaña al paquete de la estructura
+    if (res.ok && params(estTecho).espesorAuto && Math.abs((ESP_AUTO.get(estTecho.id) ?? -1) - res.espesor) > 0.004) {
+      ESP_AUTO.set(estTecho.id, res.espesor); buildObject(estTecho); updateDims();
+    }
   } else estTecho = null;
-  renderEstructura(res); renderEstPanel(res);
+  renderEstructura(res); renderEstPanel(res); renderCapas();
 }
 function renderEstructura(res) {
   for (const c of [...estGroup.children]) { estGroup.remove(c); c.traverse(n => { if (n.isMesh) n.geometry.dispose(); }); }
   estRes = res;
   if (!res || !res.ok || !estTecho) { applyModoEst(); return; }
   estGroup.position.fromArray(estTecho.pos); estGroup.rotation.set(0, estTecho.rot[1], 0);
+  const plano = new THREE.Group(), inclinado = grupoInclinado(estGroup, params(estTecho));
+  estGroup.add(plano);
   const up = new THREE.Vector3(0, 1, 0);
   for (const m of res.miembros) {
     let mesh;
@@ -2210,50 +2360,58 @@ function renderEstructura(res) {
         mesh.quaternion.setFromUnitVectors(up, dir); mesh.position.copy(a).lerp(b, 0.5);
       } else if (m.vertical) {
         mesh = new THREE.Mesh(new THREE.BoxGeometry(m.w, L, m.d), EST_MAT[m.grupo]); mesh.position.copy(a).lerp(b, 0.5);
-      } else { // viga: p0/p1 marcan el eje de la cara superior (sigue la pendiente)
+      } else { // viga: p0/p1 marcan el eje de su cara superior
         const yA = up.clone().sub(dir.clone().multiplyScalar(up.dot(dir))).normalize(), zA = new THREE.Vector3().crossVectors(dir, yA);
         mesh = new THREE.Mesh(new THREE.BoxGeometry(L, m.d, m.w), EST_MAT[m.grupo]);
         mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(dir, yA, zA));
         mesh.position.copy(a).lerp(b, 0.5).addScaledVector(yA, -m.d / 2);
       }
     }
-    mesh.userData = { est: m, layer: EST_CAPA[m.grupo], soloEst: !!m.soloEst };
+    mesh.userData = { est: m, layer: EST_CAPA[m.grupo], soloEst: !!m.soloEst, capa: GRUPO_CAPA[m.grupo], basePos: mesh.position.clone() };
     mesh.castShadow = m.grupo !== 'FU'; mesh.receiveShadow = true;
-    estGroup.add(mesh);
+    (m.enTecho ? inclinado : plano).add(mesh);
   }
-  // etiquetas: una por familia de perfiles
+  // etiquetas: una por familia de piezas
   const vistos = new Set();
   const etiqueta = (m, texto, pos) => {
     const el = document.createElement('div'); el.className = 'estlbl'; el.style.setProperty('--c', EST_COL[m.grupo]); el.innerHTML = texto;
-    const o = new CSS2DObject(el); o.position.copy(pos); o.userData.soloEst = !!m.soloEst; estGroup.add(o);
+    const o = new CSS2DObject(el); o.position.copy(pos); o.userData.soloEst = !!m.soloEst; (m.enTecho ? inclinado : plano).add(o);
   };
   const medio = m => m.box ? new THREE.Vector3(m.box[0], m.box[1], m.box[2]) : new THREE.Vector3(...m.p0).lerp(new THREE.Vector3(...m.p1), 0.5);
   for (const m of res.miembros) {
     const clave = m.grupo === 'VP' ? m.nombre : m.grupo === 'COL' ? 'COL' : m.grupo + m.seccion;
-    if (vistos.has(clave) || ['PE', 'BA'].includes(m.grupo) || (m.grupo === 'COL' && m.soloEst) || m.nombre.includes('capitel') || m.nombre.includes('pedestal')) continue;
+    if (vistos.has(clave) || ['PE', 'BA', 'SC'].includes(m.grupo) || (m.grupo === 'COL' && m.soloEst) || /capitel|pedestal|Gárgola/.test(m.nombre)) continue;
     if (m.grupo === 'VT' && m.nombre.indexOf(`VT-${Math.ceil(res.vts.length / 2)} `) !== 0) continue;
     vistos.add(clave);
-    const nom = m.grupo === 'VP' ? m.nombre.split(' · ')[0] : m.grupo === 'VT' ? `VT ×${res.vts.length}` : m.grupo === 'FU' ? (m.nombre.includes('zapata') ? 'Zapata' : 'Pedestal') : m.grupo === 'PL' ? (m.nombre.includes('capitel') ? 'Capitel' : 'Placa base') : EST_NOM[m.grupo].split(' (')[0];
-    const pos = medio(m); if (m.grupo === 'COL') pos.y += 0.25; if (m.grupo === 'PL' && !m.nombre.includes('capitel')) pos.y -= 0.02;
+    const nom = m.grupo === 'VP' ? m.nombre.split(' · ')[0] : m.grupo === 'VT' ? `VT ×${res.vts.length}` : m.grupo === 'FU' ? 'Zapata' : m.grupo === 'PL' ? 'Placa base' : m.grupo === 'CA' ? 'Canaleta oculta' : EST_NOM[m.grupo].split(' (')[0];
+    const pos = medio(m); if (m.grupo === 'COL') pos.y += 0.25; if (m.grupo === 'PL') pos.y -= 0.02;
     etiqueta(m, `<b>${esc(nom)}</b> ${esc(m.seccion.replace(/^Tubo /, 'tubo '))}`, pos);
   }
   applyModoEst();
 }
 function applyModoEst() {
-  const ver = viewMode !== 'terminado' && !!(estRes && estRes.ok);
+  const ver = viewMode !== 'terminado' && !!(estRes && estRes.ok), ex = viewMode === 'capas' ? explodeVal() : 0;
   estGroup.visible = ver;
   estGroup.traverse(n => {
-    const visible = ver && (viewMode === 'estructura' || !n.userData.soloEst);
-    if (n.isMesh) n.visible = visible;
-    if (n.isCSS2DObject) n.visible = visible && showDims;
+    const capa = n.userData.capa;
+    let visible = ver;
+    if (viewMode === 'sincielo') visible = ver && !n.userData.soloEst;
+    if (viewMode === 'estructura') visible = ver && capa !== 'subcielo';
+    if (viewMode === 'capas') visible = ver && (!capa || capaOn(capa));
+    if (n.isMesh) {
+      n.visible = visible;
+      if (n.userData.basePos) { n.position.copy(n.userData.basePos); if (ex && n.userData.est.enTecho) n.position.y += (CAPA_OFF[capa] || 0) * ex; }
+    }
+    if (n.isCSS2DObject) n.visible = visible && showDims && viewMode !== 'capas' && (viewMode === 'estructura' || !n.userData.soloEst);
   });
   // terreno color tierra y semitransparente para ver las fundaciones
-  const transp = viewMode === 'estructura';
+  const transp = viewMode === 'estructura' || (viewMode === 'capas' && capaOn('bases'));
   if (M.pasto.transparent !== transp) {
     M.pasto.transparent = transp; M.pasto.opacity = transp ? 0.6 : 1; M.pasto.depthWrite = !transp; M.pasto.needsUpdate = true;
     if (!transp) M.pasto.color.set(state.materiales.pasto || MAT_DEFS.pasto.c);
   }
   if (transp) M.pasto.color.set('#8b7a60');
+  $('#capasPanel').hidden = viewMode !== 'capas';
 }
 function setViewMode(m) {
   viewMode = m; ui.modo = m; saveUI();
@@ -2261,8 +2419,23 @@ function setViewMode(m) {
   state.objetos.forEach(applyModoObj); applyModoEst();
   if (m !== 'terminado' && estRes && !estRes.ok) toast(estRes.avisos[0] || 'No se pudo calcular la estructura', 5000);
   status(m === 'terminado' ? 'Vista de la pérgola terminada'
-    : m === 'sincielo' ? 'Sin cielorraso: se ve la estructura del techo desde abajo. Hacé clic en un perfil para ver sus datos.'
-    : 'Estructura: cada color es un tipo de perfil; abajo del piso se ven placas, pernos y zapatas. Hacé clic en un perfil para ver sus datos.');
+    : m === 'sincielo' ? 'Sin cielorraso: se ve desde abajo cómo está colgado el cielorraso y la estructura del techo. Hacé clic en una pieza para ver sus datos.'
+    : m === 'capas' ? 'Capas: cada parte de la obra tiene su color. Prendé o apagá capas y separalas con el control de la derecha.'
+    : 'Estructura: solo el acero y las fundaciones; abajo del piso se ven placas, pernos y zapatas. Hacé clic en un perfil para ver sus datos.');
+}
+// Panel de capas (vista "Capas"): colores, prender/apagar y separar
+function renderCapas() {
+  const r = estRes && estRes.ok ? estRes : null, techo = state.objetos.find(o => o.tipo === 'techo' && o.visible !== false), pt = techo ? params(techo) : null;
+  const det = {
+    cubierta: pt ? `${(cfgEst().cubierta === 'chapa' ? 'Chapa trapezoidal' : 'Panel sándwich 30 mm')}, pendiente ${pt.pendiente} %` : '',
+    canaleta: r ? `${Math.round(r.gut.b * 1000)}×${Math.round(r.gut.d * 1000)} mm, ${r.gut.nBaj} bajadas Ø110${r.embutidas ? ' embutidas' : ''}` : '',
+    correas: r ? `${r.COR.nombre}, continuas` : '', vt: r ? `Tubo ${r.VT.nombre} ×${r.vts.length}` : '', vp: r ? `Tubo ${r.lines[0].sec.nombre} ×${r.lines.length}` : '',
+    columnas: r && r.colDesign.length ? `Tubo ${r.colDesign[0].sec.nombre}` : '', fascia: 'ACM 4 mm sobre bastidor', banda: pt ? `${pt.bandaListones} lamas` : '',
+    subcielo: 'Omega c/0,80 m + varillas Ø6', cielorraso: cfgEst().cielorraso === 'wpc' ? 'Lamas WPC' : 'Lamas de aluminio símil madera',
+    bases: r && r.colDesign.length ? `Zapatas ${fmt2(r.colDesign[0].zap.B)} m` : '', resto: '',
+  };
+  $('#capasList').innerHTML = CAPAS.map(({ k, n, c }) => `<label class="capa"><input type="checkbox" data-capa="${k}" ${capaOn(k) ? 'checked' : ''}><span class="sw" style="background:${c}"></span><span>${esc(n)}${det[k] ? `<small>${esc(det[k])}</small>` : ''}</span></label>`).join('');
+  $('#explode').value = ui.explode ?? 0.35;
 }
 function infoEst(m) {
   const t = `${m.nombre} — ${m.seccion}${m.L ? ` · largo ${m.L.toFixed(2)} m` : ''}${m.kg ? ` · ${Math.round(m.kg)} kg` : ''}${m.vol ? ` · ${m.vol.toFixed(2)} m³` : ''}${m.util ? ` · uso ${Math.round(m.util * 100)} %` : ''}`;
@@ -2272,8 +2445,10 @@ function infoEst(m) {
 function computoEst(res) {
   const g = new Map();
   for (const m of res.miembros) {
-    const k = m.grupo + '|' + m.seccion;
-    if (!g.has(k)) g.set(k, { grupo: m.grupo, desc: m.grupo === 'FU' ? (m.nombre.includes('zapata') ? 'Zapatas' : 'Pedestales') : m.grupo === 'PL' ? (m.nombre.includes('capitel') ? 'Capiteles' : 'Placas base con cartelas') : EST_NOM[m.grupo], seccion: m.seccion, piezas: new Set(), n: 0, L: 0, kg: 0, vol: 0 });
+    const k = m.grupo + '|' + m.seccion + (m.grupo === 'SC' || m.grupo === 'CA' ? '|' + m.nombre : '');
+    const desc = m.grupo === 'FU' ? (m.nombre.includes('zapata') ? 'Zapatas' : 'Pedestales') : m.grupo === 'PL' ? (m.nombre.includes('capitel') ? 'Capiteles' : 'Placas base con cartelas')
+      : m.grupo === 'SC' ? (m.nombre.includes('Cuelgue') ? 'Cuelgues del cielorraso' : 'Portantes del cielorraso') : m.grupo === 'CA' ? (m.nombre.includes('Gárgola') ? 'Gárgolas de rebalse' : 'Canaleta oculta') : EST_NOM[m.grupo];
+    if (!g.has(k)) g.set(k, { grupo: m.grupo, desc, seccion: m.seccion, piezas: new Set(), n: 0, L: 0, kg: 0, vol: 0 });
     const f = g.get(k); f.n++; f.L += m.L && !m.box ? m.L : 0; f.kg += m.kg || 0; f.vol += m.vol || 0; f.piezas.add(m.nombre.split(' · ')[0]);
   }
   const filas = [...g.values()].map(f => ({ ...f, n: f.grupo === 'COL' ? f.piezas.size : f.n, barras: ['VP', 'VT', 'CO', 'COL'].includes(f.grupo) ? Math.ceil(f.L * 1.05 / 6) : 0 }));
@@ -2295,11 +2470,13 @@ function renderEstPanel(res) {
   let h = '';
   if (res.avisos && res.avisos.length) h += `<div class="estav">${res.avisos.map(a => `<p>⚠ ${esc(a)}</p>`).join('')}</div>`;
   if (!res.ok) { el.innerHTML = h; return; }
-  const { filas, hormigon } = computoEst(res);
+  const { filas, hormigon } = computoEst(res), gt = res.gut, pt = params(estTecho);
+  h += `<p class="hint" style="margin-top:0">Armado apilado: vigas principales sobre las columnas, transversales apoyadas encima y correas C arriba. Techo de ${fmt2(res.espesor)} m de alto, con pendiente de ${pt.pendiente} % hacia ${LADO_TXT[res.lowSide]}.</p>`;
   h += '<table class="esttab"><tr><th>Elemento</th><th class="n">Cant.</th><th class="n">kg</th></tr>' + filas.map(f =>
     `<tr><td><span class="sw" style="background:${EST_COL[f.grupo]}"></span>${esc(f.desc)}<br><span style="color:var(--muted)">${esc(f.seccion)}${f.L ? ` · ${f.L.toFixed(2)} m` : ''}${f.vol ? ` · ${f.vol.toFixed(2)} m³` : ''}</span></td><td class="n">${f.n}</td><td class="n">${f.kg ? Math.round(f.kg) : '—'}</td></tr>`).join('') +
     `<tr class="tot"><td>Acero estructural</td><td></td><td class="n">${Math.round(res.kgAcero)}</td></tr></table>`;
-  h += `<p class="hint">${(res.kgAcero / res.area).toFixed(1)} kg de acero por m² de techo · hormigón ${hormigon.toFixed(2)} m³ · el agua escurre hacia ${LADO_TXT[res.lowSide]} (pendiente ${res.cfg.pendiente} %).</p>`;
+  h += `<p class="hint">${(res.kgAcero / res.area).toFixed(1)} kg de acero por m² de techo · hormigón ${hormigon.toFixed(2)} m³.</p>`;
+  h += `<p class="hint"><b>Lluvia:</b> ${res.cfg.lluvia} mm/h sobre ${fmt1(gt.Q * 3600 / res.cfg.lluvia)} m² dan ${fmt1(gt.Q)} L/s. La canaleta oculta de ${Math.round(gt.b * 1000)}×${Math.round(gt.d * 1000)} mm lleva ${fmt1(gt.cap)} L/s (${fmt1(gt.cap / gt.Q)} veces lo necesario, por las hojas). Bajan por ${gt.nBaj} caños Ø110${res.embutidas ? ' embutidos en la muralla' : ''}, y tiene 2 gárgolas de rebalse por si se tapa.</p>`;
   const c = res.cargas;
   h += `<details class="esthip"><summary>Verificaciones (${res.checks.length})</summary><ul class="estchk">${res.checks.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
     <p class="hint">Cargas: permanente ${c.Dc.toFixed(2)} kN/m² · mantenimiento ${c.Lr.toFixed(2)} kN/m² · presión de viento ${c.qh.toFixed(2)} kN/m² (V ${res.cfg.viento} m/s) · combinación de diseño ${c.qU.toFixed(2)} kN/m² hacia abajo y ${(-c.qUP).toFixed(2)} kN/m² de succión. Uso máximo admitido 85 %, flechas L/300.</p></details>`;
@@ -2334,6 +2511,13 @@ $('#bCotas').onclick = e => { showDims = !showDims; e.target.classList.toggle('o
 document.querySelectorAll('#modoBtns button').forEach(b => b.onclick = () => setViewMode(b.dataset.modo));
 $('#bEstVer').onclick = () => { setViewMode('estructura'); setView('persp'); };
 $('#bEstCsv').onclick = csvEst;
+$('#capasList').addEventListener('change', e => {
+  const k = e.target.dataset.capa; if (!k) return;
+  ui.capas = { ...(ui.capas || {}), [k]: e.target.checked }; saveUI();
+  state.objetos.forEach(applyModoObj); applyModoEst();
+});
+$('#explode').addEventListener('input', e => { ui.explode = parseFloat(e.target.value); state.objetos.forEach(applyModoObj); applyModoEst(); });
+$('#explode').addEventListener('change', saveUI);
 $('#estSec').addEventListener('change', e => {
   const k = e.target.dataset.est; if (!k) return;
   const v = e.target.value; state.estructura[k] = isNaN(+v) ? v : +v; estDirty = true; commit();
@@ -2404,7 +2588,7 @@ window.addEventListener('keydown', e => {
   else if (k === 'f') focusSelected();
   else if (k === 'q') toggleRefVisible();
   else if (['1', '2', '3', '4'].includes(k)) setView(['persp', 'planta', 'frente', 'lateral'][+k - 1]);
-  else if (['5', '6', '7'].includes(k)) setViewMode(['terminado', 'sincielo', 'estructura'][+k - 5]);
+  else if (['5', '6', '7', '8'].includes(k)) setViewMode(['terminado', 'sincielo', 'capas', 'estructura'][+k - 5]);
   else if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'pageup', 'pagedown'].includes(k)) { e.preventDefault(); nudge(k, e.shiftKey); }
 });
 
@@ -2416,6 +2600,7 @@ try { saved = JSON.parse(recall(LS_KEY) || 'null'); } catch (e) { saved = null; 
 state = migrate(saved || defaultState());
 lastSnap = snapshot();
 applyLighting(); applyMaterials(); rebuildAll();
+{ const te = state.objetos.find(o => o.tipo === 'techo' && o.visible !== false); if (te) { syncAltura(te); lastSnap = snapshot(); } }
 buildAddGrid(); renderOutliner(); renderMats(); renderProps(); applySnap(); updateUndoButtons();
 $('#units').value = state.export.units || 'm'; $('#expQue').value = state.export.que || 'todo';
 layout();
